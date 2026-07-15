@@ -1,0 +1,13 @@
+---
+description: Project norms — unified extractors, privacy, short docs
+alwaysApply: true
+---
+
+# Catpasswd Hash Extract
+
+- Read `AGENTS.md` and `docs/architecture.md` before changing product behavior.
+- Goal: unified multi-format, multi-platform hash extraction with a stable `HashResult` for John/hashcat/exporters.
+- Keep docs and UI neutral and open-source focused.
+- Align docs with **logic and constraints**, not folder trees. Keep docs short.
+- Extraction in Rust via Tauri IPC; first-party native extractors only in production.
+- Update `docs/architecture.md` when changing flows, `HashResult`, formats, or privacy rules.
