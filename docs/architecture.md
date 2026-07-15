@@ -23,8 +23,14 @@ Keep product docs and UI **neutral** and open-source focused — describe what t
 ## Logic flow
 
 ```
-pick file → detect format → extract hash → show / export
+pick source (File | Disk | Text) → detect → extract hash → show / export
 ```
+
+| Source tab | Intent |
+|------------|--------|
+| File | Encrypted archives / documents (v1 focus) |
+| Disk | Encrypted volumes (e.g. BitLocker) — planned |
+| Text | Hash / convert text input — planned |
 
 | Concern | Rule |
 |---------|------|
