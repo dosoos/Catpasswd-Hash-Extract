@@ -76,6 +76,29 @@ The Disk tab enumerates physical disks and partitions via native Win32 IOCTLs (n
 
 Constraints: raw disk access requires **Administrator** (else an access-denied error advising to elevate); disks are never streamed in full — `FileMeta` digests are computed from the **volume header only** (first 1 MiB) and flagged with a warning. Disk enumeration/inspection are Windows-only; other platforms return a clear error.
 
+## Format roadmap (native `*2john` replacements)
+
+Same detect → extract → `HashResult` path for every new format. Priority = how often users need it for local recovery / forensics, not John’s script count. Duplicate scripts (`.py` / `.pl` / binary) map to **one** extractor. `test_*` scripts are out of scope.
+
+| Version | Theme | Target formats (John script → product) |
+|---------|--------|----------------------------------------|
+| **v1** (done) | Archives, docs, BitLocker | `zip2john`, `rar2john`, `7z2john`, `office2john`, `pdf2john`, `bitlocker2john` |
+| **v2** | Crypto wallets | `bitcoin2john`, `ethereum2john`, `electrum2john`, `monero2john`, `multibit2john`, `blockchain2john`, `coinomi2john`, `bitshares2john`, `cardano2john`, `tezos2john`, `keplr2john`, `neo2john`, `restic2john` |
+| **v3** | Password managers + common vaults | `keepass2john`, `1password2john`, `bitwarden2john`, `lastpass2john`, `enpass2john`, `dashlane2john`, `pwsafe2john`, `padlock2john`, `authenticator2john`, `andotp2john` |
+| **v4** | Disk / volume encryption (cross-platform) | `truecrypt2john` (+ VeraCrypt), `luks2john`, `dmg2john`, `fvde2john`, `diskcryptor2john`, `bestcrypt2john` / `bestcryptve2john`, `encfs2john`, `ecryptfs2john`, `geli2john`, `openbsd_softraid2john`, `pgpdisk2john` / `pgpwde2john` / `pgpsda2john`, `vdi2john` |
+| **v5** | Keys, certs, SSH, browsers | `gpg2john`, `ssh2john`, `putty2john`, `pfx2john`, `pem2john`, `keystore2john`, `keychain2john`, `keyring2john`, `mozilla2john`, `filezilla2john`, `openssl2john`, `known_hosts2john` |
+| **v6** | Office/docs leftovers + Apple / mobile backups | `libreoffice2john`, `iwork2john`, `staroffice2john`, `applenotes2john`, `itunes_backup2john`, `androidbackup2john`, `androidfde2john`, `money2john` |
+| **v7** | Messaging & cloud apps | `signal2john`, `telegram2john`, `ansible2john`, `gitea2john`, `axcrypt2john`, `strip2john`, `zed2john`, `oubliette2john`, `encdatavault2john`, `deepsound2john` |
+| **v8** | Network / Wi‑Fi / auth captures | `wpapcap2john`, `hccap2john` / `hccapx2john`, `pcap2john`, `vncpcap2john`, `radius2john`, `apop2john`, `ikescan2john`, `sipdump2john`, `krb2john` / `kirbi2john` / `ccache2john` / `kdcdump2john`, `DPAPImk2john` |
+| **v9** | Enterprise / niche / OS hashes | `aix2john`, `oracle2john`, `sap2john`, `racf2john`, `lotus2john`, `cisco2john`, `mongodb2john`, `ejabberd2john`, `prosody2john`, `mosquitto2john`, `mcafee_epo2john`, `ibmiscanner2john`, `sspr2john`, `ldif2john`, `htdigest2john`, `mac2john` / `lion2john`, `uaf2john`, `cracf2john`, `kwallet2john`, `bks2john`, `pse2john`, `ps_token2john`, `vmx2john`, `aem2john`, `apex2john`, `atmail2john`, `aruba2john`, `sense2john`, `adxcsouf2john`, `network2john`, remaining one-offs |
+
+**Rules for later versions**
+
+- Prefer formats with a stable hashcat `-m` (or clear John format id); document gaps as `warnings`.
+- Disk formats that need raw device access follow the Disk tab + privilege notes; file-based images (DMG, VDI, LUKS container files) stay on the File tab.
+- Skip or defer items that are mainly online protocol dumps with no durable file artifact, unless Text/Disk mode needs them.
+- Reorder within a version if real user demand shifts; do not invent a parallel architecture.
+
 ## Unified result contract
 
 Detection + whole-file digests produce a `FileMeta`; the extractor produces a `HashResult`; the IPC command returns `InspectResult { meta, hash }`.

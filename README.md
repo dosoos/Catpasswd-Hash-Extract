@@ -21,6 +21,8 @@ One app, many formats, one result contract — source files never need to leave 
 
 Archives: ZIP (ZipCrypto / WinZip AES), RAR3 (`-hp`) / RAR5, 7z · Documents: Microsoft Office (2007–2013+), PDF (revisions 2–6) · Volumes: BitLocker (Windows Disk tab)
 
+More formats (crypto wallets, KeePass, LUKS, TrueCrypt/VeraCrypt, GPG, SSH, …) are sequenced in the [format roadmap](./docs/architecture.md#format-roadmap-native-2john-replacements).
+
 ## Architecture
 
 Norms: [`docs/architecture.md`](./docs/architecture.md) · agents: [`AGENTS.md`](./AGENTS.md)
