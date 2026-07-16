@@ -57,10 +57,11 @@ Native Rust extractors, one per format, all sharing the detect → extract → `
 | 7-Zip (AES) | `$7z$…` | 11600 |
 | Office 2010/2013+ (Agile) | `$office$*2010/2013*…` | 9500 / 9600 |
 | Office 2007 (Standard) | `$office$*2007*…` | 9400 |
+| Excel 97–2003 (RC4) | `$oldoffice$…` (John `office2john`) | 9700 / 9800 |
 | PDF (R2–R6) | `$pdf$…` | 10400 / 10500 / 10600 / 10700 |
 | BitLocker (password VMK) | `$bitlocker$0$…` | 22100 |
 
-Limitations are surfaced as `warnings` (e.g. RAR3 `-p`, legacy Office XOR/RC4, header-encrypted RAR5 IV placeholder, multi-coder 7z). Unencrypted inputs return a clear "not encrypted" warning.
+Limitations are surfaced as `warnings` (e.g. RAR3 `-p`, legacy Office XOR obfuscation, header-encrypted RAR5 IV placeholder, multi-coder 7z). Unencrypted inputs return a clear "not encrypted" warning.
 
 ## Disk source (Windows)
 

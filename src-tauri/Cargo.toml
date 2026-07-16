@@ -30,6 +30,7 @@ crc32fast = "1.4"
 hex = "0.4"
 thiserror = "2"
 base64 = "0.22"
+cfb = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 # Reuses the same `windows` version already pulled in by Tauri (see Cargo.lock).
