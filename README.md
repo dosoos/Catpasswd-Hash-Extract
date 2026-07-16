@@ -41,6 +41,17 @@ npm run tauri dev    # develop
 npm run tauri build  # release
 ```
 
+## Releases
+
+GitHub Actions builds installers for Windows / macOS / Linux when you push a version tag. Keep `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` versions in sync, then:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow creates a **draft** GitHub Release with the artifacts; publish it from the Releases page when ready. You can also run **Release** manually under Actions → workflow_dispatch.
+
 ## Security & ethics
 
 Use only on files you own or are authorized to recover. Prefer hash extraction over uploading encrypted sources when privacy matters.
