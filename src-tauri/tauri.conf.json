@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "catpasswd-hash-extract",
+  "productName": "Catpasswd Hash Extract",
   "version": "0.1.0",
   "identifier": "com.dosoos.catpasswd-hash-extract",
   "build": {
