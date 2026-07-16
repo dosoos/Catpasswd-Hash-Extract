@@ -29,7 +29,7 @@ pick source (File | Disk | Text) → detect → extract hash → show / export
 | Source tab | Intent |
 |------------|--------|
 | File | Encrypted archives / documents (v1 focus) |
-| Disk | Encrypted volumes (e.g. BitLocker) — planned |
+| Disk | Lists physical disks/partitions and extracts BitLocker hashes (Windows) |
 | Text | Hash / convert text input — planned |
 
 | Concern | Rule |
@@ -58,8 +58,23 @@ Native Rust extractors, one per format, all sharing the detect → extract → `
 | Office 2010/2013+ (Agile) | `$office$*2010/2013*…` | 9500 / 9600 |
 | Office 2007 (Standard) | `$office$*2007*…` | 9400 |
 | PDF (R2–R6) | `$pdf$…` | 10400 / 10500 / 10600 / 10700 |
+| BitLocker (password VMK) | `$bitlocker$0$…` | 22100 |
 
 Limitations are surfaced as `warnings` (e.g. RAR3 `-p`, legacy Office XOR/RC4, header-encrypted RAR5 IV placeholder, multi-coder 7z). Unencrypted inputs return a clear "not encrypted" warning.
+
+## Disk source (Windows)
+
+The Disk tab enumerates physical disks and partitions via native Win32 IOCTLs (no PowerShell/WMI), mirroring the Disk Management view: `list_disks()` returns `DiskInfo`/`PartitionInfo` including synthesized **unallocated** gaps (non-selectable), drive letters, labels, and file systems.
+
+`inspect_volume(disk_index, partition_index)` returns the same `InspectResult` contract as files. It reads the raw partition (via the physical drive so metadata is visible even on an unlocked volume), parses the BitLocker (FVE) volume header, and scans the FVE metadata blocks:
+
+| Case | Result |
+|------|--------|
+| Password-protected VMK | `$bitlocker$0$…` hash line, hashcat `-m 22100` |
+| Only TPM / recovery / startup-key / clear | `warning`: not crackable with 22100 |
+| Not BitLocker | `warning`: volume is not BitLocker-encrypted |
+
+Constraints: raw disk access requires **Administrator** (else an access-denied error advising to elevate); disks are never streamed in full — `FileMeta` digests are computed from the **volume header only** (first 1 MiB) and flagged with a warning. Disk enumeration/inspection are Windows-only; other platforms return a clear error.
 
 ## Unified result contract
 

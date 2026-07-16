@@ -5,6 +5,7 @@
 //! in `warnings`/`error` so the UI can always show file metadata plus a
 //! message. `inspect_path` only returns `Err` for genuine IO failures.
 
+pub mod bitlocker;
 pub mod detect;
 pub mod office;
 pub mod pdf;

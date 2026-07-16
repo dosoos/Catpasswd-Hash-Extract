@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "Catpasswd Hash Extract",
-        "width": 780,
-        "height": 560,
-        "minWidth": 560,
-        "minHeight": 420
+        "width": 860,
+        "height": 620,
+        "minWidth": 640,
+        "minHeight": 480
       }
     ],
     "security": {

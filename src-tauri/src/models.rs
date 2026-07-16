@@ -76,3 +76,45 @@ pub struct InspectResult {
     pub meta: FileMeta,
     pub hash: HashResult,
 }
+
+/// A physical disk as shown in the Disk tab (mirrors the Disk Management view).
+#[derive(Debug, Clone, Serialize)]
+pub struct DiskInfo {
+    pub index: u32,
+    /// Display name, e.g. `"Disk 0"`.
+    pub name: String,
+    /// Best-effort layout: `"GPT"` / `"MBR"` / `"Basic"` / `"Dynamic"`.
+    pub layout: String,
+    /// Total capacity in bytes.
+    pub size: u64,
+    /// Best-effort status, e.g. `"Online"`.
+    pub status: String,
+    /// Partitions and unallocated gaps in on-disk order.
+    pub partitions: Vec<PartitionInfo>,
+}
+
+/// A partition or an unallocated gap within a [`DiskInfo`].
+#[derive(Debug, Clone, Serialize)]
+pub struct PartitionInfo {
+    /// Stable id, `"{disk}:{part}"`, used by the UI to request inspection.
+    pub id: String,
+    pub disk_index: u32,
+    /// Index within the disk's partition list (unallocated gaps included).
+    pub partition_index: u32,
+    /// Byte offset from the start of the disk.
+    pub offset: u64,
+    /// Size in bytes.
+    pub size: u64,
+    /// Drive letter without a colon, e.g. `"C"`, or `None`.
+    pub letter: Option<String>,
+    /// Volume label, or `""` when unknown.
+    pub label: String,
+    /// File system name, e.g. `"NTFS"`, or `None`.
+    pub file_system: Option<String>,
+    /// `"primary" | "extended" | "logical" | "unallocated" | "efi" | "recovery" | "unknown"`.
+    pub kind: String,
+    /// Best-effort short status text, e.g. `"Healthy"`.
+    pub status: String,
+    /// Whether the UI may offer this entry for inspection.
+    pub selectable: bool,
+}

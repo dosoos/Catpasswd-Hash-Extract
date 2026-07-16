@@ -19,7 +19,7 @@ One app, many formats, one result contract — source files never need to leave 
 
 ## Supported formats (v1)
 
-Archives: ZIP (ZipCrypto / WinZip AES), RAR3 (`-hp`) / RAR5, 7z · Documents: Microsoft Office (2007–2013+), PDF (revisions 2–6)
+Archives: ZIP (ZipCrypto / WinZip AES), RAR3 (`-hp`) / RAR5, 7z · Documents: Microsoft Office (2007–2013+), PDF (revisions 2–6) · Volumes: BitLocker (Windows Disk tab)
 
 ## Architecture
 

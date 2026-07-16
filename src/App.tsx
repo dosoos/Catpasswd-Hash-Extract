@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
-type AppPhase = "idle" | "inspecting" | "ready";
+type AppPhase = "idle" | "picking" | "inspecting" | "ready";
 type AppMode = "file" | "disk" | "text";
 
 const MODES: { id: AppMode; label: string }[] = [
@@ -39,6 +39,29 @@ type InspectResult = {
   hash: HashResult;
 };
 
+type PartitionInfo = {
+  id: string;
+  disk_index: number;
+  partition_index: number;
+  offset: number;
+  size: number;
+  letter: string | null;
+  label: string;
+  file_system: string | null;
+  kind: string;
+  status: string;
+  selectable: boolean;
+};
+
+type DiskInfo = {
+  index: number;
+  name: string;
+  layout: string;
+  size: number;
+  status: string;
+  partitions: PartitionInfo[];
+};
+
 type FileDetails = {
   name: string;
   formatLabel: string;
@@ -53,7 +76,10 @@ type FileDetails = {
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function formatModified(ms: number | null): string {
@@ -80,6 +106,16 @@ function toDetails(meta: FileMeta): FileDetails {
     sha256: meta.sha256,
     sha512: meta.sha512,
   };
+}
+
+function partitionTitle(part: PartitionInfo): string {
+  if (part.kind === "unallocated") return "Unallocated";
+  const letter = part.letter ? `(${part.letter}:)` : "";
+  const label = part.label.trim();
+  if (label && letter) return `${label} ${letter}`;
+  if (label) return label;
+  if (letter) return letter;
+  return part.kind.charAt(0).toUpperCase() + part.kind.slice(1);
 }
 
 function CopyIcon() {
@@ -124,22 +160,28 @@ function App() {
   const [details, setDetails] = useState<FileDetails | null>(null);
   const [hash, setHash] = useState<HashResult | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [disks, setDisks] = useState<DiskInfo[]>([]);
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [diskLoading, setDiskLoading] = useState(false);
 
   function showToast(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(null), 2200);
   }
 
-  function resetFileState() {
+  function resetSourceState() {
     setPhase("idle");
     setDetails(null);
     setHash(null);
+    setDisks([]);
+    setSelectedPartId(null);
+    setDiskLoading(false);
   }
 
   function switchMode(next: AppMode) {
     if (next === mode) return;
     setMode(next);
-    resetFileState();
+    resetSourceState();
   }
 
   async function openPicker() {
@@ -185,7 +227,65 @@ function App() {
       setHash(result.hash);
       setPhase("ready");
     } catch (err) {
-      resetFileState();
+      resetSourceState();
+      const message =
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "Inspection failed";
+      showToast(message);
+    }
+  }
+
+  async function openDiskPicker() {
+    setDiskLoading(true);
+    setSelectedPartId(null);
+    try {
+      const list = await invoke<DiskInfo[]>("list_disks");
+      setDisks(list);
+      setPhase("picking");
+      if (list.length === 0) {
+        showToast("No disks found");
+      }
+    } catch (err) {
+      const raw =
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "Failed to list disks";
+      const message = /admin|access|denied|permission/i.test(raw)
+        ? "Need Administrator to list disks — close the app and Run as administrator."
+        : raw;
+      showToast(message);
+      setPhase("idle");
+    } finally {
+      setDiskLoading(false);
+    }
+  }
+
+  async function confirmDiskSelection() {
+    const part = disks
+      .flatMap((d) => d.partitions)
+      .find((p) => p.id === selectedPartId);
+    if (!part || !part.selectable) {
+      showToast("Select a partition");
+      return;
+    }
+    setPhase("inspecting");
+    setDetails(null);
+    setHash(null);
+    try {
+      const result = await invoke<InspectResult>("inspect_volume", {
+        diskIndex: part.disk_index,
+        partitionIndex: part.partition_index,
+      });
+      setDetails(toDetails(result.meta));
+      setHash(result.hash);
+      setPhase("ready");
+    } catch (err) {
+      setPhase("picking");
       const message =
         typeof err === "string"
           ? err
@@ -197,7 +297,7 @@ function App() {
   }
 
   function reset() {
-    resetFileState();
+    resetSourceState();
   }
 
   function copyText(value: string, label: string) {
@@ -248,7 +348,7 @@ function App() {
     }
   }
 
-  const showModeTabs = mode !== "file" || phase === "idle";
+  const showModeTabs = phase === "idle" || phase === "picking";
   const noticeLines =
     hash == null
       ? []
@@ -260,8 +360,16 @@ function App() {
             : []),
         ];
 
+  const selectedPart = disks
+    .flatMap((d) => d.partitions)
+    .find((p) => p.id === selectedPartId);
+
   return (
-    <div className={showModeTabs ? "app" : "app app-result"}>
+    <div
+      className={
+        phase === "picking" ? "app app-disk-pick" : showModeTabs ? "app" : "app app-result"
+      }
+    >
       {showModeTabs && (
         <nav className="mode-tabs" aria-label="Source type">
           {MODES.map((item) => (
@@ -287,7 +395,11 @@ function App() {
             Pick an encrypted file to detect details and export a crack-ready hash —
             all locally.
           </p>
-          <button type="button" className="btn btn-primary btn-hero" onClick={() => void openPicker()}>
+          <button
+            type="button"
+            className="btn btn-primary btn-hero"
+            onClick={() => void openPicker()}
+          >
             Select encrypted file
           </button>
           <p className="formats">
@@ -296,22 +408,136 @@ function App() {
         </section>
       )}
 
-      {mode === "disk" && (
+      {mode === "disk" && phase === "idle" && (
         <section className="hero" aria-labelledby="disk-title">
           <p className="brand" id="disk-title">
             Disk
           </p>
           <p className="tagline">
-            Extract hashes from encrypted volumes such as BitLocker. Coming soon.
+            Select a volume to extract a BitLocker hash locally — same result flow as
+            files.
           </p>
-          <button type="button" className="btn btn-primary btn-hero" disabled>
-            Select volume
+          <button
+            type="button"
+            className="btn btn-primary btn-hero"
+            onClick={() => void openDiskPicker()}
+            disabled={diskLoading}
+          >
+            {diskLoading ? "Loading disks…" : "Select volume"}
           </button>
-          <p className="formats">Supports: BitLocker (planned)</p>
+          <p className="formats">
+            Supports: BitLocker (Windows). If listing fails, restart the app as
+            Administrator.
+          </p>
         </section>
       )}
 
-      {mode === "text" && (
+      {mode === "disk" && phase === "picking" && (
+        <section className="disk-picker" aria-label="Disk and partition map">
+          <header className="disk-picker-head">
+            <h1 className="disk-picker-title">Select a volume</h1>
+            <p className="disk-picker-hint">
+              Click a partition, then confirm. Unallocated space cannot be selected.
+            </p>
+          </header>
+
+          <div className="disk-map" role="list">
+            {disks.map((disk) => {
+              const total = Math.max(disk.size, 1);
+              return (
+                <div key={disk.index} className="disk-row" role="listitem">
+                  <div className="disk-meta">
+                    <div className="disk-meta-name">{disk.name}</div>
+                    <div className="disk-meta-line">{disk.layout}</div>
+                    <div className="disk-meta-line">{formatBytes(disk.size)}</div>
+                    <div className="disk-meta-line">{disk.status}</div>
+                  </div>
+                  <div className="disk-track" role="group" aria-label={disk.name}>
+                    {disk.partitions.map((part) => {
+                      const weight = Math.max(part.size / total, 0.01);
+                      const selected = part.id === selectedPartId;
+                      const title = partitionTitle(part);
+                      return (
+                        <button
+                          key={part.id}
+                          type="button"
+                          className={[
+                            "disk-part",
+                            `kind-${part.kind}`,
+                            selected ? "is-selected" : "",
+                            part.selectable ? "" : "is-disabled",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          style={{ flexGrow: weight }}
+                          disabled={!part.selectable}
+                          aria-pressed={selected}
+                          title={`${title} · ${formatBytes(part.size)}`}
+                          onClick={() => setSelectedPartId(part.id)}
+                        >
+                          <span className="disk-part-bar" aria-hidden="true" />
+                          <span className="disk-part-body">
+                            <span className="disk-part-title">{title}</span>
+                            <span className="disk-part-size">
+                              {formatBytes(part.size)}
+                            </span>
+                            {part.file_system && (
+                              <span className="disk-part-fs">{part.file_system}</span>
+                            )}
+                            <span className="disk-part-status">{part.status}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <ul className="disk-legend" aria-label="Partition colors">
+            <li>
+              <span className="swatch kind-unallocated" /> Unallocated
+            </li>
+            <li>
+              <span className="swatch kind-primary" /> Primary
+            </li>
+            <li>
+              <span className="swatch kind-logical" /> Logical
+            </li>
+            <li>
+              <span className="swatch kind-efi" /> EFI / System
+            </li>
+            <li>
+              <span className="swatch kind-recovery" /> Recovery
+            </li>
+          </ul>
+
+          <div className="disk-picker-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setPhase("idle");
+                setDisks([]);
+                setSelectedPartId(null);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!selectedPart?.selectable}
+              onClick={() => void confirmDiskSelection()}
+            >
+              Confirm selection
+            </button>
+          </div>
+        </section>
+      )}
+
+      {mode === "text" && phase === "idle" && (
         <section className="hero" aria-labelledby="text-title">
           <p className="brand" id="text-title">
             Text
@@ -326,20 +552,21 @@ function App() {
         </section>
       )}
 
-      {mode === "file" && phase === "inspecting" && (
+      {phase === "inspecting" && (
         <section className="status-panel" aria-live="polite" aria-busy="true">
           <div className="spinner" aria-hidden="true" />
           <p className="status-title">
-            Inspecting file<span className="status-ellipsis" aria-hidden="true" />
+            Inspecting {mode === "disk" ? "volume" : "file"}
+            <span className="status-ellipsis" aria-hidden="true" />
           </p>
           <p className="status-hint">
-            Large files may take a while — please wait
+            Large sources may take a while — please wait
           </p>
         </section>
       )}
 
-      {mode === "file" && phase === "ready" && details && hash && (
-        <section className="workspace" aria-label="File result">
+      {phase === "ready" && details && hash && (
+        <section className="workspace" aria-label="Extraction result">
           <header className="workspace-head">
             <h1 className="file-name" title={details.name}>
               {details.name}
@@ -348,7 +575,9 @@ function App() {
 
           <div className="workspace-body">
             <div className="detail-block">
-              <h2 className="block-label">File details</h2>
+              <h2 className="block-label">
+                {mode === "disk" ? "Volume details" : "File details"}
+              </h2>
               <dl className="detail-grid">
                 <div>
                   <dt>Format</dt>

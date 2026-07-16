@@ -31,6 +31,16 @@ hex = "0.4"
 thiserror = "2"
 base64 = "0.22"
 
+[target.'cfg(windows)'.dependencies]
+# Reuses the same `windows` version already pulled in by Tauri (see Cargo.lock).
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_Security",
+] }
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

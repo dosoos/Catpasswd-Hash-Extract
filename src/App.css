@@ -58,6 +58,267 @@ body {
   padding-top: 28px;
 }
 
+.app-disk-pick {
+  padding-bottom: 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* —— Disk picker (Disk Management–style map) —— */
+.disk-picker {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 14px;
+}
+
+.disk-picker-head {
+  flex-shrink: 0;
+}
+
+.disk-picker-title {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.disk-picker-hint {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.disk-map {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px;
+}
+
+.disk-row {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 8px;
+  align-items: stretch;
+  min-height: 88px;
+}
+
+.disk-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink-muted);
+}
+
+.disk-meta-name {
+  font-family: var(--font-brand);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.disk-meta-line {
+  word-break: break-word;
+}
+
+.disk-track {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f0f0f0;
+}
+
+.disk-part {
+  --disk-part-min: 148px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  flex-basis: var(--disk-part-min);
+  min-width: var(--disk-part-min);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  background: #e8eef8;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.disk-part.kind-unallocated {
+  --disk-part-min: 48px;
+  background: #d8d8d8;
+  cursor: default;
+}
+
+.disk-part:last-child {
+  border-right: 0;
+}
+
+.disk-part-bar {
+  display: block;
+  height: 6px;
+  flex-shrink: 0;
+  background: #2f4f8f;
+}
+
+.disk-part.kind-unallocated .disk-part-bar {
+  background: #1a1a1a;
+}
+
+.disk-part.kind-primary .disk-part-bar,
+.disk-part.kind-unknown .disk-part-bar {
+  background: #2f4f8f;
+}
+
+.disk-part.kind-logical .disk-part-bar,
+.disk-part.kind-extended .disk-part-bar {
+  background: #3d7a7a;
+}
+
+.disk-part.kind-efi .disk-part-bar {
+  background: #6b7a3d;
+}
+
+.disk-part.kind-recovery .disk-part-bar {
+  background: #8a4a3a;
+}
+
+.disk-part-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 7px 8px;
+  min-width: 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.disk-part-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.disk-part-size,
+.disk-part-fs,
+.disk-part-status {
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.disk-part.is-selected {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  z-index: 1;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(0, 0, 0, 0.06) 4px,
+    rgba(0, 0, 0, 0.06) 8px
+  );
+}
+
+.disk-part.is-disabled {
+  opacity: 0.85;
+}
+
+.disk-part:not(.is-disabled):hover .disk-part-bar {
+  filter: brightness(1.12);
+}
+
+.disk-part:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.disk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+.disk-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 8px;
+  border-radius: 1px;
+  background: #2f4f8f;
+}
+
+.swatch.kind-unallocated {
+  background: #1a1a1a;
+}
+
+.swatch.kind-primary {
+  background: #2f4f8f;
+}
+
+.swatch.kind-logical {
+  background: #3d7a7a;
+}
+
+.swatch.kind-efi {
+  background: #6b7a3d;
+}
+
+.swatch.kind-recovery {
+  background: #8a4a3a;
+}
+
+.disk-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .disk-row {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .disk-track {
+    min-height: 84px;
+  }
+}
+
 /* —— Mode tabs —— */
 .mode-tabs {
   display: flex;
