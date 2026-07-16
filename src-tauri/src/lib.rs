@@ -36,6 +36,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            use tauri::Manager;
+            let title = format!(
+                "Catpasswd Hash Extract v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_title(&title)?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             inspect_file,
             write_text_file,
