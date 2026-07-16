@@ -43,14 +43,14 @@ npm run tauri build  # release
 
 ## Releases
 
-GitHub Actions builds installers for Windows / macOS / Linux when you push a version tag. Keep `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` versions in sync, then:
+GitHub Actions builds installers for Windows / macOS / Linux when you push a version tag. CI reads the tag (e.g. `v1.0.0`) and syncs `package.json` / `tauri.conf.json` / `Cargo.toml` automatically — you do not need to bump those files by hand:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-The workflow creates a **draft** GitHub Release with the artifacts; publish it from the Releases page when ready. You can also run **Release** manually under Actions → workflow_dispatch.
+The workflow creates a **draft** GitHub Release with the artifacts; publish it from the Releases page when ready. You can also run **Release** manually under Actions → workflow_dispatch (enter a version such as `1.0.0`).
 
 ## Security & ethics
 

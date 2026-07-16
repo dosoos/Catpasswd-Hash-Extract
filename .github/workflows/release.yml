@@ -1,6 +1,6 @@
 # Tag-triggered multi-platform release builds (Tauri 2 + tauri-action).
-# Push a version tag (e.g. v0.1.0) whose number matches package.json /
-# src-tauri/tauri.conf.json / src-tauri/Cargo.toml, or run manually via workflow_dispatch.
+# Push a version tag (e.g. v1.0.0); CI syncs package.json / tauri.conf.json /
+# Cargo.toml from the tag before building. Or run manually via workflow_dispatch.
 name: Release
 
 on:
@@ -8,6 +8,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.0.0). Required for manual runs.'
+        required: true
+        type: string
 
 jobs:
   publish-tauri:
@@ -40,6 +45,11 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
+
+      - name: Sync version from tag / input
+        env:
+          RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: node scripts/sync-version-from-tag.mjs
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
