@@ -1,4 +1,6 @@
-import { useId, useRef, useState, type ChangeEvent } from "react";
+import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
 type AppPhase = "idle" | "inspecting" | "ready";
@@ -9,6 +11,33 @@ const MODES: { id: AppMode; label: string }[] = [
   { id: "disk", label: "Disk" },
   { id: "text", label: "Text" },
 ];
+
+/** Mirrors Rust `FileMeta` (snake_case JSON). */
+type FileMeta = {
+  name: string;
+  format_label: string;
+  size: number;
+  modified_ms: number | null;
+  crc32: string;
+  md5: string;
+  sha256: string;
+  sha512: string;
+};
+
+/** Mirrors Rust `HashResult` (snake_case JSON). */
+type HashResult = {
+  format: string;
+  source_name: string;
+  hash_line: string;
+  hashcat_mode: number | null;
+  warnings: string[];
+  error: string | null;
+};
+
+type InspectResult = {
+  meta: FileMeta;
+  hash: HashResult;
+};
 
 type FileDetails = {
   name: string;
@@ -21,40 +50,14 @@ type FileDetails = {
   sha512: string;
 };
 
-type HashPreview = {
-  format: string;
-  hashLine: string;
-  warnings: string[];
-};
-
-const ACCEPT =
-  ".zip,.rar,.7z,.docx,.xlsx,.pptx,.doc,.xls,.ppt,.pdf,.odt,.ods,.odp";
-
-/** UI mock: guess format from extension; real detection comes later via Rust. */
-function guessFormat(name: string): { id: string; label: string } {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, { id: string; label: string }> = {
-    zip: { id: "zip", label: "ZIP" },
-    rar: { id: "rar", label: "RAR / RAR5" },
-    "7z": { id: "7z", label: "7-Zip" },
-    docx: { id: "office", label: "Microsoft Office" },
-    xlsx: { id: "office", label: "Microsoft Office" },
-    pptx: { id: "office", label: "Microsoft Office" },
-    doc: { id: "office", label: "Microsoft Office" },
-    xls: { id: "office", label: "Microsoft Office" },
-    ppt: { id: "office", label: "Microsoft Office" },
-    pdf: { id: "pdf", label: "PDF" },
-  };
-  return map[ext] ?? { id: "unknown", label: "Unknown" };
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function formatModified(ms: number): string {
+function formatModified(ms: number | null): string {
+  if (ms == null) return "—";
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
@@ -66,19 +69,17 @@ function formatModified(ms: number): string {
   }).format(new Date(ms));
 }
 
-/** Placeholder digests for UI preview only. */
-function mockDigest(seed: string, len: number): string {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  let out = "";
-  while (out.length < len) {
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    out += (h >>> 0).toString(16).padStart(8, "0");
-  }
-  return out.slice(0, len);
+function toDetails(meta: FileMeta): FileDetails {
+  return {
+    name: meta.name,
+    formatLabel: meta.format_label,
+    sizeLabel: formatBytes(meta.size),
+    modifiedLabel: formatModified(meta.modified_ms),
+    crc32: meta.crc32,
+    md5: meta.md5,
+    sha256: meta.sha256,
+    sha512: meta.sha512,
+  };
 }
 
 function CopyIcon() {
@@ -117,41 +118,11 @@ function CopyableValue({
   );
 }
 
-function buildMockPreview(file: File): { details: FileDetails; hash: HashPreview } {
-  const guessed = guessFormat(file.name);
-  const seed = `${file.name}:${file.size}:${file.lastModified}`;
-  return {
-    details: {
-      name: file.name,
-      formatLabel: guessed.label,
-      sizeLabel: formatBytes(file.size),
-      modifiedLabel: formatModified(file.lastModified),
-      crc32: mockDigest(seed + ":crc32", 8),
-      md5: mockDigest(seed + ":md5", 32),
-      sha256: mockDigest(seed + ":sha256", 64),
-      sha512: mockDigest(seed + ":sha512", 128),
-    },
-    hash: {
-      format: guessed.id,
-      hashLine:
-        guessed.id === "unknown"
-          ? ""
-          : `$mock$${guessed.id}$${mockDigest(seed + ":hash", 40)}`,
-      warnings:
-        guessed.id === "unknown"
-          ? ["UI preview: unrecognized file extension."]
-          : ["UI preview: placeholder hash — native extraction not wired yet."],
-    },
-  };
-}
-
 function App() {
-  const inputId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<AppMode>("file");
   const [phase, setPhase] = useState<AppPhase>("idle");
   const [details, setDetails] = useState<FileDetails | null>(null);
-  const [hash, setHash] = useState<HashPreview | null>(null);
+  const [hash, setHash] = useState<HashResult | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(message: string) {
@@ -163,7 +134,6 @@ function App() {
     setPhase("idle");
     setDetails(null);
     setHash(null);
-    if (inputRef.current) inputRef.current.value = "";
   }
 
   function switchMode(next: AppMode) {
@@ -172,31 +142,62 @@ function App() {
     resetFileState();
   }
 
-  function openPicker() {
-    inputRef.current?.click();
+  async function openPicker() {
+    try {
+      const selected = await open({
+        multiple: false,
+        title: "Select encrypted file",
+        filters: [
+          {
+            name: "Encrypted archives & documents",
+            extensions: [
+              "zip",
+              "rar",
+              "7z",
+              "docx",
+              "xlsx",
+              "pptx",
+              "doc",
+              "xls",
+              "ppt",
+              "pdf",
+            ],
+          },
+          { name: "All files", extensions: ["*"] },
+        ],
+      });
+      if (selected == null) return;
+      const path = typeof selected === "string" ? selected : selected[0];
+      if (!path) return;
+      await inspectPath(path);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Open dialog failed");
+    }
+  }
+
+  async function inspectPath(path: string) {
+    setPhase("inspecting");
+    setDetails(null);
+    setHash(null);
+    try {
+      const result = await invoke<InspectResult>("inspect_file", { path });
+      setDetails(toDetails(result.meta));
+      setHash(result.hash);
+      setPhase("ready");
+    } catch (err) {
+      resetFileState();
+      const message =
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "Inspection failed";
+      showToast(message);
+    }
   }
 
   function reset() {
     resetFileState();
-  }
-
-  function onFileChosen(file: File | undefined) {
-    if (!file) return;
-    setPhase("inspecting");
-    setDetails(null);
-    setHash(null);
-
-    // Mock inspect delay; replace with Rust IPC later.
-    window.setTimeout(() => {
-      const preview = buildMockPreview(file);
-      setDetails(preview.details);
-      setHash(preview.hash);
-      setPhase("ready");
-    }, 480);
-  }
-
-  function onInputChange(e: ChangeEvent<HTMLInputElement>) {
-    onFileChosen(e.target.files?.[0]);
   }
 
   function copyText(value: string, label: string) {
@@ -211,18 +212,53 @@ function App() {
   }
 
   function copyHash() {
-    if (!hash?.hashLine) {
+    if (!hash?.hash_line) {
       showToast("Nothing to copy");
       return;
     }
-    copyText(hash.hashLine, "Hash");
+    copyText(hash.hash_line, "Hash");
   }
 
-  function exportHash() {
-    showToast("Export not wired yet — UI preview only");
+  async function exportHash() {
+    if (!hash?.hash_line || !details) {
+      showToast("Nothing to export");
+      return;
+    }
+    const base = details.name.replace(/\.[^.]+$/, "") || details.name;
+    try {
+      const path = await save({
+        title: "Export hash",
+        defaultPath: `${base}.hash`,
+        filters: [{ name: "Hash file", extensions: ["hash", "txt"] }],
+      });
+      if (path == null) return;
+      await invoke("write_text_file", {
+        path,
+        contents: `${hash.hash_line}\n`,
+      });
+      showToast("Hash saved");
+    } catch (err) {
+      const message =
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "Export failed";
+      showToast(message);
+    }
   }
 
   const showModeTabs = mode !== "file" || phase === "idle";
+  const noticeLines =
+    hash == null
+      ? []
+      : [
+          ...(hash.error ? [hash.error] : []),
+          ...hash.warnings,
+          ...(hash.hashcat_mode != null
+            ? [`hashcat -m ${hash.hashcat_mode}`]
+            : []),
+        ];
 
   return (
     <div className={showModeTabs ? "app" : "app app-result"}>
@@ -242,15 +278,6 @@ function App() {
         </nav>
       )}
 
-      <input
-        id={inputId}
-        ref={inputRef}
-        className="sr-only"
-        type="file"
-        accept={ACCEPT}
-        onChange={onInputChange}
-      />
-
       {mode === "file" && phase === "idle" && (
         <section className="hero" aria-labelledby="brand-title">
           <p className="brand" id="brand-title">
@@ -260,7 +287,7 @@ function App() {
             Pick an encrypted file to detect details and export a crack-ready hash —
             all locally.
           </p>
-          <button type="button" className="btn btn-primary btn-hero" onClick={openPicker}>
+          <button type="button" className="btn btn-primary btn-hero" onClick={() => void openPicker()}>
             Select encrypted file
           </button>
           <p className="formats">
@@ -300,10 +327,14 @@ function App() {
       )}
 
       {mode === "file" && phase === "inspecting" && (
-        <section className="status-panel" aria-live="polite">
+        <section className="status-panel" aria-live="polite" aria-busy="true">
           <div className="spinner" aria-hidden="true" />
-          <p className="status-title">Inspecting file…</p>
-          <p className="status-hint">Reading metadata and fingerprints (preview)</p>
+          <p className="status-title">
+            Inspecting file<span className="status-ellipsis" aria-hidden="true" />
+          </p>
+          <p className="status-hint">
+            Large files may take a while — please wait
+          </p>
         </section>
       )}
 
@@ -376,17 +407,17 @@ function App() {
 
             <div className="hash-block">
               <h2 className="block-label">Hash</h2>
-              {hash.hashLine ? (
+              {hash.hash_line ? (
                 <pre className="hash-line" tabIndex={0}>
-                  {hash.hashLine}
+                  {hash.hash_line}
                 </pre>
               ) : (
-                <p className="hash-empty">No hash preview</p>
+                <p className="hash-empty">No hash extracted</p>
               )}
-              {hash.warnings.length > 0 && (
+              {noticeLines.length > 0 && (
                 <ul className="warnings">
-                  {hash.warnings.map((w) => (
-                    <li key={w}>{w}</li>
+                  {noticeLines.map((line) => (
+                    <li key={line}>{line}</li>
                   ))}
                 </ul>
               )}
@@ -395,15 +426,15 @@ function App() {
                   type="button"
                   className="btn btn-primary"
                   onClick={copyHash}
-                  disabled={!hash.hashLine}
+                  disabled={!hash.hash_line}
                 >
                   Copy hash
                 </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={exportHash}
-                  disabled={!hash.hashLine}
+                  onClick={() => void exportHash()}
+                  disabled={!hash.hash_line}
                 >
                   Export .hash
                 </button>

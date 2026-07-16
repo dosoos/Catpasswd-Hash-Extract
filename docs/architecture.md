@@ -41,22 +41,39 @@ pick source (File | Disk | Text) → detect → extract hash → show / export
 ## Product constraints
 
 - Authorized recovery only (files the user owns or may unlock).
-- Replace the Tauri `greet` demo when real features land.
+- File tab opens a native dialog and passes a filesystem path to Rust `inspect_file` (no `*2john` shell-out).
 - MIT License — do not relicense without maintainer agreement.
 
-## Planned formats (v1)
+## Formats (v1, implemented)
 
-ZIP, RAR/RAR5, 7z, Microsoft Office, PDF (selected encryption types). More formats follow the same pipeline.
+Native Rust extractors, one per format, all sharing the detect → extract → `HashResult` path. Each takes `(path, source_name)` and returns a `HashResult` (never a hard error), so meta + a message are always available.
 
-## Unified result contract (`HashResult`)
+| Format | Output line | hashcat `-m` |
+|--------|-------------|--------------|
+| ZIP (WinZip AES) | `$zip2$…` (ZFILE form for large payloads) | 13600 |
+| ZIP (ZipCrypto) | `$pkzip$…` | 17200 / 17210 |
+| RAR5 | `$rar5$…` | 13000 |
+| RAR3 (`-hp`) | `$RAR3$*0*…` | 12500 |
+| 7-Zip (AES) | `$7z$…` | 11600 |
+| Office 2010/2013+ (Agile) | `$office$*2010/2013*…` | 9500 / 9600 |
+| Office 2007 (Standard) | `$office$*2007*…` | 9400 |
+| PDF (R2–R6) | `$pdf$…` | 10400 / 10500 / 10600 / 10700 |
 
-Stable fields the UI, exporters, and crackers should agree on:
+Limitations are surfaced as `warnings` (e.g. RAR3 `-p`, legacy Office XOR/RC4, header-encrypted RAR5 IV placeholder, multi-coder 7z). Unencrypted inputs return a clear "not encrypted" warning.
+
+## Unified result contract
+
+Detection + whole-file digests produce a `FileMeta`; the extractor produces a `HashResult`; the IPC command returns `InspectResult { meta, hash }`.
+
+`FileMeta`: `name`, `format_label`, `size`, `modified_ms`, `crc32`, `md5`, `sha256`, `sha512`.
+
+`HashResult` — stable fields the UI, exporters, and crackers agree on:
 
 | Field | Meaning |
 |-------|---------|
 | `format` | Detected format id |
 | `source_name` | Basename for display / default export name |
-| `hash_line` | Primary crack hash line (prefer John-compatible where a stable format exists) |
+| `hash_line` | Primary crack hash line (hashcat/John-compatible shape) |
 | `hashcat_mode` | hashcat `-m` if known, else null |
 | `warnings` / `error` | Non-fatal notes / fatal message |
 

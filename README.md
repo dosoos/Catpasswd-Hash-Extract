@@ -17,9 +17,9 @@ One app, many formats, one result contract — source files never need to leave 
 | Unified hash contract | Stable `HashResult` / export lines for John, hashcat, and other crackers |
 | Replace script chaos | First-party native extractors instead of maintaining a zoo of `*2john` scripts |
 
-## Supported formats (planned v1)
+## Supported formats (v1)
 
-Archives: ZIP, RAR/RAR5, 7z · Documents: Microsoft Office, PDF (selected types)
+Archives: ZIP (ZipCrypto / WinZip AES), RAR3 (`-hp`) / RAR5, 7z · Documents: Microsoft Office (2007–2013+), PDF (revisions 2–6)
 
 ## Architecture
 

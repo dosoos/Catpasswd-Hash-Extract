@@ -21,6 +21,5 @@ Align on **behavior and constraints**, not folder layout. Update `docs/architect
 
 - New formats extend the same detect → extract → `HashResult` pipeline; do not invent a parallel architecture  
 - Extraction in Rust; UI only invokes IPC and displays/exports  
-- Replace template `greet` when implementing the real flow  
 - MIT — no relicensing without an explicit request  
 - No unsolicited extra markdown; ask before commit/push  

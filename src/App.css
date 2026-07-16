@@ -130,29 +130,41 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .status-title {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-family: var(--font-brand);
   font-weight: 600;
   font-size: 1rem;
+}
+
+.status-ellipsis::after {
+  content: "...";
+  display: inline-block;
+  width: 1.15em;
+  overflow: hidden;
+  vertical-align: bottom;
+  animation: ellipsis-clip 1.2s steps(4, end) infinite;
 }
 
 .status-hint {
   margin: 0;
   color: var(--ink-muted);
   font-size: 0.85rem;
+  text-align: center;
+  max-width: 22rem;
 }
 
 .spinner {
-  width: 22px;
-  height: 22px;
-  border: 2px solid var(--line);
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--line);
   border-top-color: var(--ink);
+  border-right-color: var(--ink);
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin 0.75s linear infinite;
 }
 
 /* —— 结果区 —— */
@@ -417,8 +429,23 @@ body {
   }
 }
 
+@keyframes ellipsis-clip {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 1.15em;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spinner {
+    animation: spin 2.4s linear infinite;
+    opacity: 0.85;
+  }
+
+  .status-ellipsis::after {
     animation: none;
+    width: 1.15em;
   }
 }
