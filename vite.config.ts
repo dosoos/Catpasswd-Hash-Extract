@@ -8,6 +8,10 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react()],
 
+  // Relative asset URLs so the bundled webview can load JS/CSS under Tauri's
+  // custom protocol (absolute `/assets/...` → blank window in production).
+  base: "./",
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
