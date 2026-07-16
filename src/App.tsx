@@ -95,6 +95,24 @@ function formatModified(ms: number | null): string {
   }).format(new Date(ms));
 }
 
+/** Clipboard copy is disabled above this size (UTF-16 code units ≈ bytes for hex). */
+const HASH_COPY_MAX_CHARS = 256 * 1024;
+/** Rough budget so the preview wraps to about three lines (no scrollbar). */
+const HASH_PREVIEW_HEAD = 100;
+const HASH_PREVIEW_TAIL = 24;
+
+/** Truncate long hashes as `head......tail` for a short wrapped preview. */
+function previewHashLine(hash: string): string {
+  const ellipsis = "......";
+  const maxShown = HASH_PREVIEW_HEAD + ellipsis.length + HASH_PREVIEW_TAIL;
+  if (hash.length <= maxShown) return hash;
+  return `${hash.slice(0, HASH_PREVIEW_HEAD)}${ellipsis}${hash.slice(-HASH_PREVIEW_TAIL)}`;
+}
+
+function isHashTooLargeToCopy(hash: string): boolean {
+  return hash.length > HASH_COPY_MAX_CHARS;
+}
+
 function toDetails(meta: FileMeta): FileDetails {
   return {
     name: meta.name,
@@ -316,6 +334,10 @@ function App() {
       showToast("Nothing to copy");
       return;
     }
+    if (isHashTooLargeToCopy(hash.hash_line)) {
+      showToast("Hash too large to copy — use Export .hash");
+      return;
+    }
     copyText(hash.hash_line, "Hash");
   }
 
@@ -349,6 +371,9 @@ function App() {
   }
 
   const showModeTabs = phase === "idle" || phase === "picking";
+  const hashTooLargeToCopy =
+    hash != null && hash.hash_line.length > 0 && isHashTooLargeToCopy(hash.hash_line);
+
   const noticeLines =
     hash == null
       ? []
@@ -357,6 +382,9 @@ function App() {
           ...hash.warnings,
           ...(hash.hashcat_mode != null
             ? [`hashcat -m ${hash.hashcat_mode}`]
+            : []),
+          ...(hashTooLargeToCopy
+            ? ["Hash too large to copy — use Export .hash"]
             : []),
         ];
 
@@ -638,7 +666,7 @@ function App() {
               <h2 className="block-label">Hash</h2>
               {hash.hash_line ? (
                 <pre className="hash-line" tabIndex={0}>
-                  {hash.hash_line}
+                  {previewHashLine(hash.hash_line)}
                 </pre>
               ) : (
                 <p className="hash-empty">No hash extracted</p>
@@ -655,7 +683,12 @@ function App() {
                   type="button"
                   className="btn btn-primary"
                   onClick={copyHash}
-                  disabled={!hash.hash_line}
+                  disabled={!hash.hash_line || hashTooLargeToCopy}
+                  title={
+                    hashTooLargeToCopy
+                      ? "Hash too large to copy — use Export .hash"
+                      : undefined
+                  }
                 >
                   Copy hash
                 </button>

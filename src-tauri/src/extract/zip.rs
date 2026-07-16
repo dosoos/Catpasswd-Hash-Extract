@@ -1,9 +1,11 @@
-//! ZIP extractor: WinZip AES (`$zip2$`, hashcat 13600) and traditional
-//! ZipCrypto (`$pkzip$`, hashcat 17200/17210).
+//! ZIP extractor: WinZip AES (`$zip2$`) and traditional ZipCrypto (`$pkzip$`).
 //!
 //! Implemented from the PKWARE APPNOTE local-file-header layout and the
-//! WinZip AES extra-field (0x9901) specification. Output line shapes follow
-//! hashcat's publicly documented example-hash formats.
+//! WinZip AES extra-field (0x9901) specification. Output follows John the
+//! Ripper `zip2john` shapes. Current Jumbo `ZIP` / `winzip_common_valid`
+//! requires the AES DF field to be inline lowercase hex of length `Le*2`
+//! — the old `ZFILE*path*…` pointer form is rejected ("No password hashes
+//! loaded"). hashcat mode is unset for ZIP in this stage.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -14,12 +16,11 @@ use crate::models::HashResult;
 
 const FORMAT: &str = "zip";
 
-/// AES real (ciphertext) length above which the `$zip2$` line references the
-/// file on disk (ZFILE form) instead of embedding the whole ciphertext.
-const ZFILE_THRESHOLD: u64 = 256 * 1024;
-
 const LFH_SIG: [u8; 4] = [b'P', b'K', 0x03, 0x04];
 const CDH_SIG: [u8; 4] = [b'P', b'K', 0x01, 0x02];
+
+/// Warn when the inline `$zip2$` DF hex would be very large (John still loads it).
+const LARGE_INLINE_WARN: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 struct Entry {
@@ -65,7 +66,7 @@ pub fn extract(path: &Path, source_name: &str) -> HashResult {
 
     // Prefer WinZip AES when present; otherwise fall back to ZipCrypto.
     if let Some(entry) = encrypted.iter().copied().find(|e| e.aes.is_some()) {
-        return build_zip2(&mut file, path, source_name, entry);
+        return build_zip2(&mut file, source_name, entry);
     }
 
     // ZipCrypto: prefer a stored (uncompressed) entry, then the smallest.
@@ -180,7 +181,7 @@ fn salt_len_for(strength: u8) -> Option<usize> {
     }
 }
 
-fn build_zip2(file: &mut File, path: &Path, source_name: &str, entry: &Entry) -> HashResult {
+fn build_zip2(file: &mut File, source_name: &str, entry: &Entry) -> HashResult {
     let aes = entry.aes.as_ref().expect("aes entry");
     let salt_len = match salt_len_for(aes.strength) {
         Some(s) => s,
@@ -218,21 +219,11 @@ fn build_zip2(file: &mut File, path: &Path, source_name: &str, entry: &Entry) ->
         Err(e) => return HashResult::err(FORMAT, source_name, format!("read auth failed: {e}")),
     };
 
+    // John Jumbo requires DF = lowercase hex of exactly real_len bytes (no ZFILE).
     let data_off = entry.data_offset + salt_len as u64 + 2;
-
-    let df = if real_len > ZFILE_THRESHOLD {
-        let path_str = path.to_string_lossy().replace('\\', "/");
-        format!(
-            "ZFILE*{}*{:x}*{:x}",
-            path_str, entry.local_header_offset, data_off
-        )
-    } else {
-        match read_at(file, data_off, real_len as usize) {
-            Ok(b) => hex_encode(&b),
-            Err(e) => {
-                return HashResult::err(FORMAT, source_name, format!("read data failed: {e}"))
-            }
-        }
+    let df = match read_at(file, data_off, real_len as usize) {
+        Ok(b) => hex_encode(&b),
+        Err(e) => return HashResult::err(FORMAT, source_name, format!("read data failed: {e}")),
     };
 
     let line = format!(
@@ -245,7 +236,13 @@ fn build_zip2(file: &mut File, path: &Path, source_name: &str, entry: &Entry) ->
         auth = hex_encode(&auth),
     );
 
-    let mut res = HashResult::ok(FORMAT, source_name, line, Some(13600));
+    let mut res = HashResult::ok(FORMAT, source_name, line, None);
+    if real_len > LARGE_INLINE_WARN {
+        res = res.with_warning(format!(
+            "AES ciphertext is {real_len} bytes; the John hash line embeds it inline (~{} MiB hex)",
+            (real_len * 2) / (1024 * 1024)
+        ));
+    }
     if aes.actual_method != 0 && aes.actual_method != 8 {
         res = res.with_warning(format!(
             "unusual inner compression method {}",
@@ -272,7 +269,6 @@ fn build_pkzip(file: &mut File, source_name: &str, entry: &Entry) -> HashResult 
     // check_bytes: 1 if the writer needed >= 2.0 to extract, else 2 (per the
     // common convention used by zip2john-compatible output).
     let check_bytes = if entry.version_needed >= 20 { 1 } else { 2 };
-    // hashcat validates against the high word of the CRC-32.
     let cs = format!("{:04x}", (entry.crc32 >> 16) & 0xffff);
 
     // Data offset relative to the start of the local file header record.
@@ -292,10 +288,7 @@ fn build_pkzip(file: &mut File, source_name: &str, entry: &Entry) -> HashResult 
         data = hex_encode(&data),
     );
 
-    let mode = if entry.method == 0 { 17210 } else { 17200 };
-    HashResult::ok(FORMAT, source_name, line, Some(mode)).with_warning(
-        "ZipCrypto (legacy) output is best-effort; verify field shape with your cracker",
-    )
+    HashResult::ok(FORMAT, source_name, line, None)
 }
 
 fn read_at(file: &mut File, off: u64, len: usize) -> std::io::Result<Vec<u8>> {
@@ -326,5 +319,10 @@ mod tests {
         let aes = parse_aes_extra(&extra).expect("aes parsed");
         assert_eq!(aes.strength, 3);
         assert_eq!(aes.actual_method, 0);
+    }
+
+    #[test]
+    fn large_inline_warn_threshold() {
+        assert!(LARGE_INLINE_WARN >= 1024 * 1024);
     }
 }

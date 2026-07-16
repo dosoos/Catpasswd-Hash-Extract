@@ -50,8 +50,8 @@ Native Rust extractors, one per format, all sharing the detect → extract → `
 
 | Format | Output line | hashcat `-m` |
 |--------|-------------|--------------|
-| ZIP (WinZip AES) | `$zip2$…` (ZFILE form for large payloads) | 13600 |
-| ZIP (ZipCrypto) | `$pkzip$…` | 17200 / 17210 |
+| ZIP (WinZip AES) | `$zip2$…` (John `zip2john`; inline DF hex) | — (John-first; hashcat later) |
+| ZIP (ZipCrypto) | `$pkzip$…` (John `zip2john`) | — (John-first; hashcat later) |
 | RAR5 | `$rar5$…` | 13000 |
 | RAR3 (`-hp`) | `$RAR3$*0*…` | 12500 |
 | 7-Zip (AES) | `$7z$…` | 11600 |
