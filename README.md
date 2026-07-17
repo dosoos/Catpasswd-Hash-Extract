@@ -58,12 +58,12 @@ Installer assets are named with a platform suffix:
 |--------------|----------|
 | `_macos-apple-silicon.dmg` | macOS Apple Silicon (M1 / M2 / M3 / M4) |
 | `_macos-intel.dmg` | macOS Intel |
-| `_windows-x64.msi` / `_windows-x64-setup.exe` / `_windows-x64.exe` | Windows x64 (installer + portable) |
-| `_windows-x86.msi` / `_windows-x86-setup.exe` / `_windows-x86.exe` | Windows x86 32-bit (installer + portable) |
-| `_windows-arm64-setup.exe` / `_windows-arm64.exe` | Windows ARM64 (NSIS + portable; no MSI) |
+| `_windows-x64.msi` / `_windows-x64-setup.exe` / `_windows-x64-portable.exe` | Windows x64 |
+| `_windows-x86.msi` / `_windows-x86-setup.exe` / `_windows-x86-portable.exe` | Windows x86 32-bit |
+| `_windows-arm64-setup.exe` / `_windows-arm64-portable.exe` | Windows ARM64 (NSIS + portable; no MSI) |
 | `_linux-x64.AppImage` / `.deb` / `.rpm` | Linux |
 
-**Windows portable `.exe`:** download and run directly (no installer). It still needs the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) — usually already present on Windows 10/11. This is not a fully static single-binary like a Go CLI; the UI uses the system WebView2.
+**Windows `*-portable.exe`:** download and run directly (no installer). It still needs the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) — usually already present on Windows 10/11. This is not a fully static single-binary like a Go CLI; the UI uses the system WebView2.
 
 On Apple Silicon, use the apple-silicon DMG. The Intel DMG runs under Rosetta and may show a soon-unsupported warning.
 
