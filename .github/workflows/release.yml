@@ -5,10 +5,12 @@
 # Asset names use a platform suffix so downloads are easy to pick:
 #   macOS Apple Silicon → *_macos-apple-silicon.dmg
 #   macOS Intel         → *_macos-intel.dmg
-#   Windows x64         → *_windows-x64.msi / *_windows-x64-setup.exe
+#   Windows x64/x86/ARM → *_windows-{x64|x86|arm64}[.msi|-setup.exe|.exe]
 #   Linux x64           → *_linux-x64.AppImage / .deb / .rpm
-# Using the Intel macOS DMG on Apple Silicon runs under Rosetta and may show a
-# soon-unsupported warning — pick apple-silicon instead.
+#
+# Windows also uploads a portable .exe (uploadPlainBinary) for each arch —
+# double-click to run; still needs WebView2 (usually preinstalled on Win10/11).
+# ARM64: NSIS + portable only (WiX MSI does not support aarch64).
 name: Release
 
 on:
@@ -34,18 +36,34 @@ jobs:
             rust_target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
             asset_name: '[name]_[version]_macos-apple-silicon.[ext]'
+            upload_plain: false
           - platform: macos-latest
             rust_target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
             asset_name: '[name]_[version]_macos-intel.[ext]'
+            upload_plain: false
           - platform: ubuntu-22.04
             rust_target: ''
             args: ''
             asset_name: '[name]_[version]_linux-x64.[ext]'
+            upload_plain: false
           - platform: windows-latest
-            rust_target: ''
-            args: ''
+            rust_target: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc
             asset_name: '[name]_[version]_windows-x64[setup].[ext]'
+            upload_plain: true
+          - platform: windows-latest
+            rust_target: i686-pc-windows-msvc
+            args: --target i686-pc-windows-msvc
+            asset_name: '[name]_[version]_windows-x86[setup].[ext]'
+            upload_plain: true
+          # Native ARM runner — avoids fragile x64→ARM64 MSVC cross setup.
+          - platform: windows-11-arm
+            rust_target: aarch64-pc-windows-msvc
+            # MSI (WiX) does not support aarch64 — NSIS + portable exe only.
+            args: --target aarch64-pc-windows-msvc --bundles nsis
+            asset_name: '[name]_[version]_windows-arm64[setup].[ext]'
+            upload_plain: true
     runs-on: ${{ matrix.platform }}
     name: ${{ matrix.platform }}${{ matrix.rust_target && format(' ({0})', matrix.rust_target) || '' }}
     steps:
@@ -96,8 +114,13 @@ jobs:
             |----------|--------------|
             | macOS Apple Silicon (M1/M2/M3/M4) | `*_macos-apple-silicon.dmg` |
             | macOS Intel | `*_macos-intel.dmg` |
-            | Windows | `*_windows-x64.msi` / `*_windows-x64-setup.exe` |
+            | Windows x64 | `*_windows-x64.msi` / `*-setup.exe` / portable `*.exe` |
+            | Windows x86 (32-bit) | `*_windows-x86.msi` / `*-setup.exe` / portable `*.exe` |
+            | Windows ARM64 | `*_windows-arm64-setup.exe` / portable `*.exe` |
             | Linux | `*_linux-x64.AppImage` / `.deb` / `.rpm` |
+
+            **Windows portable `.exe`:** run directly without installing. Still requires
+            the WebView2 Runtime (preinstalled on most Windows 10/11 machines).
 
             On Apple Silicon, use the apple-silicon DMG. The Intel build runs under
             Rosetta and may show a soon-unsupported warning.
@@ -105,3 +128,5 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
           releaseAssetNamePattern: ${{ matrix.asset_name }}
+          uploadPlainBinary: ${{ matrix.upload_plain }}
+          uploadUpdaterJson: false
