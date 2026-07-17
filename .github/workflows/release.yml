@@ -108,7 +108,39 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'Catpasswd Hash Extract v__VERSION__'
           releaseBody: |
-            See the assets below to download installers for this version.
+            First public release of a cross-platform, local hash extractor — a native alternative to scattered John `*2john` scripts, with a unified result contract for John, hashcat, and other crackers.
+
+            ### Features
+
+            - **Multi-format file extraction (File tab)**
+              - Archives: ZIP (ZipCrypto / WinZip AES), RAR3 (`-hp`), RAR5, 7-Zip
+              - Documents: Microsoft Office (2007 / 2010 / 2013+), legacy Excel 97–2003 (RC4), PDF (revisions 2–6)
+            - **BitLocker volume extraction (Disk tab, Windows)**
+              - Enumerate physical disks and partitions
+              - Extract password-protected VMK hashes (hashcat `-m 22100`)
+            - **Unified result contract**
+              - Stable `HashResult` (hash line, hashcat mode, warnings / errors)
+              - Copy to clipboard and export `.hash` files
+            - **Desktop app**
+              - Windows / macOS / Linux installers (Tauri 2)
+              - Window title shows the app version
+              - Updated application icon
+
+            ### Fixes (since early builds)
+
+            - Fixed ZIP hashes that John could not recognize
+            - Fixed missed detection for legacy Office hashes
+            - Fixed 7z hash not correct issue
+
+            ### Notes
+
+            - Use only on files or volumes you own or are authorized to recover
+            - Extraction runs locally; source files do not need to leave your machine
+            - See `docs/architecture.md` for the format roadmap
+
+            ### Downloads
+
+            Download the installer for your platform from the assets below:
 
             | Platform | Asset suffix |
             |----------|--------------|
