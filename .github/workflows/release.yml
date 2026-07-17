@@ -1,6 +1,14 @@
 # Tag-triggered multi-platform release builds (Tauri 2 + tauri-action).
 # Push a version tag (e.g. v1.0.0); CI syncs package.json / tauri.conf.json /
 # Cargo.toml from the tag before building. Or run manually via workflow_dispatch.
+#
+# Asset names use a platform suffix so downloads are easy to pick:
+#   macOS Apple Silicon → *_macos-apple-silicon.dmg
+#   macOS Intel         → *_macos-intel.dmg
+#   Windows x64         → *_windows-x64.msi / *_windows-x64-setup.exe
+#   Linux x64           → *_linux-x64.AppImage / .deb / .rpm
+# Using the Intel macOS DMG on Apple Silicon runs under Rosetta and may show a
+# soon-unsupported warning — pick apple-silicon instead.
 name: Release
 
 on:
@@ -23,14 +31,23 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
+            rust_target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
+            asset_name: '[name]_[version]_macos-apple-silicon.[ext]'
           - platform: macos-latest
+            rust_target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
+            asset_name: '[name]_[version]_macos-intel.[ext]'
           - platform: ubuntu-22.04
+            rust_target: ''
             args: ''
+            asset_name: '[name]_[version]_linux-x64.[ext]'
           - platform: windows-latest
+            rust_target: ''
             args: ''
+            asset_name: '[name]_[version]_windows-x64[setup].[ext]'
     runs-on: ${{ matrix.platform }}
+    name: ${{ matrix.platform }}${{ matrix.rust_target && format(' ({0})', matrix.rust_target) || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,12 +71,13 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.rust_target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          key: ${{ matrix.rust_target || matrix.platform }}
 
       - name: Install frontend dependencies
         run: npm ci
@@ -71,7 +89,19 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'Catpasswd Hash Extract v__VERSION__'
-          releaseBody: 'See the assets below to download installers for this version.'
+          releaseBody: |
+            See the assets below to download installers for this version.
+
+            | Platform | Asset suffix |
+            |----------|--------------|
+            | macOS Apple Silicon (M1/M2/M3/M4) | `*_macos-apple-silicon.dmg` |
+            | macOS Intel | `*_macos-intel.dmg` |
+            | Windows | `*_windows-x64.msi` / `*_windows-x64-setup.exe` |
+            | Linux | `*_linux-x64.AppImage` / `.deb` / `.rpm` |
+
+            On Apple Silicon, use the apple-silicon DMG. The Intel build runs under
+            Rosetta and may show a soon-unsupported warning.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+          releaseAssetNamePattern: ${{ matrix.asset_name }}

@@ -52,6 +52,17 @@ git push origin v1.0.0
 
 The workflow creates a **draft** GitHub Release with the artifacts; publish it from the Releases page when ready. You can also run **Release** manually under Actions → workflow_dispatch (enter a version such as `1.0.0`).
 
+Installer assets are named with a platform suffix:
+
+| Asset suffix | Platform |
+|--------------|----------|
+| `_macos-apple-silicon.dmg` | macOS Apple Silicon (M1 / M2 / M3 / M4) |
+| `_macos-intel.dmg` | macOS Intel |
+| `_windows-x64.msi` / `_windows-x64-setup.exe` | Windows |
+| `_linux-x64.AppImage` / `.deb` / `.rpm` | Linux |
+
+On Apple Silicon, use the apple-silicon DMG. The Intel DMG runs under Rosetta and may show a soon-unsupported warning.
+
 ## Security & ethics
 
 Use only on files you own or are authorized to recover. Prefer hash extraction over uploading encrypted sources when privacy matters.
