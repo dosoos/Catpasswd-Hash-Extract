@@ -223,6 +223,17 @@ function App() {
               "pdf",
             ],
           },
+          {
+            name: "Crypto wallets",
+            extensions: [
+              "dat",
+              "json",
+              "keys",
+              "coinomi",
+              "key",
+              "txt",
+            ],
+          },
           { name: "All files", extensions: ["*"] },
         ],
       });
@@ -431,7 +442,7 @@ function App() {
             Select encrypted file
           </button>
           <p className="formats">
-            Supports: ZIP · RAR/RAR5 · 7z · Microsoft Office · PDF
+            Supports: ZIP · RAR/RAR5 · 7z · Microsoft Office · PDF · Ethereum · Bitcoin · Electrum · Monero · MetaMask · BIP38 · Blockchain.com · MultiBit · Coinomi
           </p>
         </section>
       )}

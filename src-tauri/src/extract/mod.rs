@@ -5,8 +5,17 @@
 //! in `warnings`/`error` so the UI can always show file metadata plus a
 //! message. `inspect_path` only returns `Err` for genuine IO failures.
 
+pub mod bip38;
+pub mod bitcoin;
 pub mod bitlocker;
+pub mod blockchain;
+pub mod coinomi;
 pub mod detect;
+pub mod electrum;
+pub mod ethereum;
+pub mod metamask;
+pub mod monero;
+pub mod multibit;
 pub mod office;
 pub mod pdf;
 pub mod rar;
@@ -79,6 +88,16 @@ fn dispatch(format: Format, path: &Path, source_name: &str) -> HashResult {
         Format::SevenZip => sevenz::extract(path, source_name),
         Format::Office => office::extract(path, source_name),
         Format::Pdf => pdf::extract(path, source_name),
+        // v2 — crypto wallets
+        Format::Ethereum => ethereum::extract(path, source_name),
+        Format::Bitcoin => bitcoin::extract(path, source_name),
+        Format::Electrum => electrum::extract(path, source_name),
+        Format::Monero => monero::extract(path, source_name),
+        Format::MetaMask => metamask::extract(path, source_name),
+        Format::Bip38 => bip38::extract(path, source_name),
+        Format::Blockchain => blockchain::extract(path, source_name),
+        Format::MultiBit => multibit::extract(path, source_name),
+        Format::Coinomi => coinomi::extract(path, source_name),
         Format::Unknown => HashResult::warn(
             "unknown",
             source_name,

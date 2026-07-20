@@ -60,6 +60,15 @@ Native Rust extractors, one per format, all sharing the detect → extract → `
 | Excel 97–2003 (RC4) | `$oldoffice$…` (John `office2john`) | 9700 / 9800 |
 | PDF (R2–R6) | `$pdf$…` | 10400 / 10500 / 10600 / 10700 |
 | BitLocker (password VMK) | `$bitlocker$0$…` | 22100 |
+| Ethereum Keystore (v3 UTC/JSON) | `$ethereum$s*n*r*p*salt*ct*mac` / `$ethereum$p*c*salt*ct*mac` / `$ethereum$w*…` (presale) | 15700 / 16300 (presale) |
+| Bitcoin Core (`wallet.dat` / SQLite) | `$bitcoin$<ml>$<m>$<sl>$<s>$<rounds>$2$00$2$00` | 11300 |
+| Electrum wallet (v1/v2/v3/v4) | `$electrum$1/2/3/4*…` | 16600 |
+| Monero wallet (`.keys`) | `$monero$0*<full-file-hex>` | 11800 |
+| MetaMask / browser vault | `$metamask$…` | 26500 |
+| BIP38 encrypted private key | `$bip38$<payload-hex>` | 16201 / 16202 (EC-multiply) |
+| Blockchain.com wallet (v1/v2) | `$blockchain$…` / `$blockchain$v2*…` | 17100 |
+| MultiBit Classic/HD/protobuf (`.key`/`.wallet`) | `$multibit$1/2/3*…` | 11400 |
+| Coinomi wallet (`.coinomi`) | `$multibit$3*n*r*p*salt*enc` (same 11400 kernel) | 11400 |
 
 Limitations are surfaced as `warnings` (e.g. RAR3 `-p`, legacy Office XOR obfuscation, header-encrypted RAR5 IV placeholder, multi-coder 7z). Unencrypted inputs return a clear "not encrypted" warning.
 
