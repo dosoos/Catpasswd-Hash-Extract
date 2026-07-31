@@ -19,9 +19,12 @@ One app, many formats, one result contract — source files never need to leave 
 
 ## Supported formats
 
-**Archives:** ZIP (ZipCrypto / WinZip AES), RAR3 (`-hp`) / RAR5, 7z · **Documents:** Microsoft Office (2007–2013+), PDF (revisions 2–6) · **Volumes:** BitLocker (Windows Disk tab)
-
-**Crypto wallets (v2):** Ethereum Keystore (UTC/JSON, scrypt/pbkdf2, presale), Bitcoin Core (`wallet.dat`), Electrum, Monero (`.keys`), MetaMask / browser extension vaults, BIP38 encrypted private keys, Blockchain.com, MultiBit Classic, Coinomi.
+| Category | Formats |
+|----------|---------|
+| **Archives** | ZIP (ZipCrypto / WinZip AES), RAR3 (`-hp`) / RAR5, 7z |
+| **Documents** | Microsoft Office (2007–2013+), PDF (revisions 2–6) |
+| **Volumes** | BitLocker (Windows Disk tab) |
+| **Crypto wallets (v2)** | Ethereum Keystore (UTC/JSON, scrypt/pbkdf2, presale), Bitcoin Core (`wallet.dat`), Electrum, Monero (`.keys`), MetaMask / browser extension vaults, BIP38 encrypted private keys, Blockchain.com, MultiBit Classic, Coinomi |
 
 More formats (KeePass, LUKS, TrueCrypt/VeraCrypt, GPG, SSH, …) are sequenced in the [format roadmap](./docs/architecture.md#format-roadmap-native-2john-replacements).
 
