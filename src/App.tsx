@@ -24,11 +24,14 @@ type FileMeta = {
   sha512: string;
 };
 
-/** Mirrors Rust `HashResult` (snake_case JSON). */
+/** Mirrors Rust `HashResult` (snake_case JSON). For large hashes `hash_line`
+ * is a short preview; the full line stays in Rust and is exported by token. */
 type HashResult = {
   format: string;
   source_name: string;
   hash_line: string;
+  /** Full byte length of the hash line, even when `hash_line` is a preview. */
+  hash_line_bytes: number;
   hashcat_mode: number | null;
   warnings: string[];
   error: string | null;
@@ -37,6 +40,8 @@ type HashResult = {
 type InspectResult = {
   meta: FileMeta;
   hash: HashResult;
+  /** Opaque token for `export_hash`, avoiding re-sending large lines over IPC. */
+  export_token: string;
 };
 
 type PartitionInfo = {
@@ -107,10 +112,6 @@ function previewHashLine(hash: string): string {
   const maxShown = HASH_PREVIEW_HEAD + ellipsis.length + HASH_PREVIEW_TAIL;
   if (hash.length <= maxShown) return hash;
   return `${hash.slice(0, HASH_PREVIEW_HEAD)}${ellipsis}${hash.slice(-HASH_PREVIEW_TAIL)}`;
-}
-
-function isHashTooLargeToCopy(hash: string): boolean {
-  return hash.length > HASH_COPY_MAX_CHARS;
 }
 
 /**
@@ -192,6 +193,8 @@ function App() {
   const [disks, setDisks] = useState<DiskInfo[]>([]);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [diskLoading, setDiskLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportToken, setExportToken] = useState<string | null>(null);
 
   function showToast(message: string) {
     setToast(message);
@@ -205,6 +208,8 @@ function App() {
     setDisks([]);
     setSelectedPartId(null);
     setDiskLoading(false);
+    setExporting(false);
+    setExportToken(null);
   }
 
   function switchMode(next: AppMode) {
@@ -265,6 +270,7 @@ function App() {
       const result = await invoke<InspectResult>("inspect_file", { path });
       setDetails(toDetails(result.meta));
       setHash(result.hash);
+      setExportToken(result.export_token);
       setPhase("ready");
     } catch (err) {
       resetSourceState();
@@ -323,6 +329,7 @@ function App() {
       });
       setDetails(toDetails(result.meta));
       setHash(result.hash);
+      setExportToken(result.export_token);
       setPhase("ready");
     } catch (err) {
       setPhase("picking");
@@ -356,7 +363,7 @@ function App() {
       showToast("Nothing to copy");
       return;
     }
-    if (isHashTooLargeToCopy(hash.hash_line)) {
+    if (hash.hash_line_bytes > HASH_COPY_MAX_CHARS) {
       showToast("Hash too large to copy — use Export .hash");
       return;
     }
@@ -364,7 +371,7 @@ function App() {
   }
 
   async function exportHash() {
-    if (!hash?.hash_line || !details) {
+    if (!hash?.hash_line || !details || !exportToken) {
       showToast("Nothing to export");
       return;
     }
@@ -376,11 +383,15 @@ function App() {
         filters: [{ name: "Hash file", extensions: ["hash", "txt"] }],
       });
       if (path == null) return;
-      await invoke("write_text_file", {
-        path,
-        contents: `${hash.hash_line}\n`,
-      });
-      showToast("Hash saved");
+      // The full line stays in Rust and is written directly by token, so even
+      // hundreds-of-MB hashes export quickly without round-tripping over IPC.
+      setExporting(true);
+      try {
+        await invoke("export_hash", { token: exportToken, path });
+        showToast("Hash saved");
+      } finally {
+        setExporting(false);
+      }
     } catch (err) {
       const message =
         typeof err === "string"
@@ -394,11 +405,9 @@ function App() {
 
   const showModeTabs = phase === "idle" || phase === "picking";
   const hashTooLargeToCopy =
-    hash != null && hash.hash_line.length > 0 && isHashTooLargeToCopy(hash.hash_line);
+    hash != null && hash.hash_line_bytes > HASH_COPY_MAX_CHARS;
   const hashSizeLabel =
-    hash && hash.hash_line.length > 0
-      ? formatBytes(new TextEncoder().encode(hash.hash_line).length)
-      : "—";
+    hash && hash.hash_line_bytes > 0 ? formatBytes(hash.hash_line_bytes) : "—";
 
   const noticeLines =
     hash == null
@@ -727,11 +736,13 @@ function App() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn btn-secondary btn-export"
                   onClick={() => void exportHash()}
-                  disabled={!hash.hash_line}
+                  disabled={!hash.hash_line || exporting}
+                  aria-busy={exporting}
                 >
-                  Export .hash
+                  {exporting && <span className="btn-spinner" aria-hidden="true" />}
+                  {exporting ? "Exporting" : "Export .hash"}
                 </button>
                 <button
                   type="button"

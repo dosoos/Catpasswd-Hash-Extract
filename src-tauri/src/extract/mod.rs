@@ -32,6 +32,7 @@ use crc32fast::Hasher as Crc32;
 use md5::{Digest, Md5};
 use sha2::{Sha256, Sha512};
 
+use crate::hash_cache;
 use crate::models::{FileMeta, HashResult, InspectResult};
 use detect::Format;
 use util::basename;
@@ -77,7 +78,7 @@ pub fn inspect_path(path: &Path) -> Result<InspectResult, String> {
 
     let hash = dispatch(format, path, &source_name);
 
-    Ok(InspectResult { meta, hash })
+    Ok(hash_cache::finalize(meta, hash))
 }
 
 fn dispatch(format: Format, path: &Path, source_name: &str) -> HashResult {

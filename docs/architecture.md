@@ -121,9 +121,12 @@ Detection + whole-file digests produce a `FileMeta`; the extractor produces a `H
 |-------|---------|
 | `format` | Detected format id |
 | `source_name` | Basename for display / default export name |
-| `hash_line` | Primary crack hash line (hashcat/John-compatible shape) |
+| `hash_line` | Primary crack hash line (hashcat/John-compatible shape); for large lines (>256 KiB) this is a short `head......tail` preview and the full line stays in the process-side hash cache |
+| `hash_line_bytes` | Full byte length of the original hash line, even when `hash_line` is a preview |
 | `hashcat_mode` | hashcat `-m` if known, else null |
 | `warnings` / `error` | Non-fatal notes / fatal message |
+
+`InspectResult` adds `export_token`: an opaque handle the UI passes to `export_hash` to write the full cached line to disk, so large hashes (e.g. Monero, which embeds the whole file as hex) never cross IPC into or out of the webview.
 
 Prefer one coherent `HashResult` over format-specific ad-hoc strings in the UI.
 

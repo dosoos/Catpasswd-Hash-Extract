@@ -4,7 +4,13 @@ use serde::Serialize;
 pub struct HashResult {
     pub format: String,
     pub source_name: String,
+    /// Full hash line when small; a short `head......tail` preview when the
+    /// line is large (the full line stays in the process-side hash cache and
+    /// is written on export without crossing IPC).
     pub hash_line: String,
+    /// Full byte length of the original hash line, even when `hash_line` is a
+    /// truncated preview.
+    pub hash_line_bytes: u64,
     pub hashcat_mode: Option<u32>,
     pub warnings: Vec<String>,
     pub error: Option<String>,
@@ -21,6 +27,7 @@ impl HashResult {
         Self {
             format: format.to_string(),
             source_name: source_name.to_string(),
+            hash_line_bytes: hash_line.len() as u64,
             hash_line,
             hashcat_mode,
             warnings: Vec::new(),
@@ -34,6 +41,7 @@ impl HashResult {
             format: format.to_string(),
             source_name: source_name.to_string(),
             hash_line: String::new(),
+            hash_line_bytes: 0,
             hashcat_mode: None,
             warnings: Vec::new(),
             error: Some(message.into()),
@@ -46,6 +54,7 @@ impl HashResult {
             format: format.to_string(),
             source_name: source_name.to_string(),
             hash_line: String::new(),
+            hash_line_bytes: 0,
             hashcat_mode: None,
             warnings: vec![message.into()],
             error: None,
@@ -75,6 +84,9 @@ pub struct FileMeta {
 pub struct InspectResult {
     pub meta: FileMeta,
     pub hash: HashResult,
+    /// Opaque token for `export_hash`; avoids re-sending a large hash line
+    /// through IPC when exporting to a `.hash` file.
+    pub export_token: String,
 }
 
 /// A physical disk as shown in the Disk tab (mirrors the Disk Management view).

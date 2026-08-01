@@ -1,7 +1,9 @@
 mod disk;
 mod extract;
+mod hash_cache;
 mod models;
 
+use std::io::Write;
 use std::path::Path;
 
 use models::{DiskInfo, InspectResult};
@@ -13,10 +15,21 @@ fn inspect_file(path: String) -> Result<InspectResult, String> {
     extract::inspect_path(Path::new(&path))
 }
 
-/// Write exported hash text to a user-chosen path (from the save dialog).
+/// Export the cached hash line for `token` to `path`. The full line never
+/// crosses IPC — important for formats whose hash embeds the whole source file
+/// (hundreds of MB). Buffered so large writes don't materialize one giant
+/// allocation beyond the cached line.
 #[tauri::command]
-fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    std::fs::write(Path::new(&path), contents).map_err(|e| format!("cannot write file: {e}"))
+fn export_hash(token: String, path: String) -> Result<(), String> {
+    let contents = hash_cache::get_line(&token)
+        .ok_or_else(|| "hash is no longer cached; re-inspect the file and export again".to_string())?;
+    let file =
+        std::fs::File::create(Path::new(&path)).map_err(|e| format!("cannot create file: {e}"))?;
+    let mut writer = std::io::BufWriter::new(file);
+    writer
+        .write_all(contents.as_bytes())
+        .and_then(|()| writer.flush())
+        .map_err(|e| format!("cannot write file: {e}"))
 }
 
 /// Enumerate physical disks and their partitions for the Disk tab.
@@ -49,7 +62,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             inspect_file,
-            write_text_file,
+            export_hash,
             list_disks,
             inspect_volume
         ])

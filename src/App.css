@@ -643,6 +643,28 @@ body {
   border-color: var(--ink);
 }
 
+/* Export-in-progress: solid (not faded like a disabled button), with a spinner. */
+.btn-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-export[aria-busy="true"] {
+  opacity: 1;
+  cursor: progress;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--ink);
+  border-right-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
 .btn-hero {
   margin-top: 24px;
   padding: 0.65em 1.25em;
@@ -705,6 +727,11 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .spinner {
+    animation: spin 2.4s linear infinite;
+    opacity: 0.85;
+  }
+
+  .btn-spinner {
     animation: spin 2.4s linear infinite;
     opacity: 0.85;
   }

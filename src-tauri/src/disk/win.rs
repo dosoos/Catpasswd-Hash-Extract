@@ -28,6 +28,7 @@ use windows::Win32::System::Ioctl::{
 use windows::Win32::System::IO::DeviceIoControl;
 
 use crate::extract::bitlocker;
+use crate::hash_cache;
 use crate::models::{DiskInfo, FileMeta, HashResult, InspectResult, PartitionInfo};
 
 /// Number of `\\.\PhysicalDriveN` slots to probe.
@@ -574,7 +575,7 @@ pub fn inspect_volume(disk_index: u32, partition_index: u32) -> Result<InspectRe
         sha512: digest.sha512,
     };
 
-    Ok(InspectResult { meta, hash })
+    Ok(hash_cache::finalize(meta, hash))
 }
 
 /// Open the device to read a partition's raw bytes, returning `(device, base
