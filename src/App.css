@@ -551,6 +551,10 @@ body {
   min-width: 0;
 }
 
+.hash-meta {
+  margin: 0 0 14px;
+}
+
 .hash-line {
   margin: 0;
   padding: 12px 14px;

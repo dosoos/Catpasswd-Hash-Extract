@@ -113,6 +113,17 @@ function isHashTooLargeToCopy(hash: string): boolean {
   return hash.length > HASH_COPY_MAX_CHARS;
 }
 
+/**
+ * Identifies the hash type (not the source file format). hashcat `-m` mode when
+ * known; otherwise the John/inline `$name$` prefix (e.g. `pkzip`, `zip2`).
+ */
+function hashFormatLabel(hash: HashResult): string {
+  if (hash.hashcat_mode != null) return `hashcat -m ${hash.hashcat_mode}`;
+  const match = /^\$([^$]+)\$/.exec(hash.hash_line);
+  if (match) return match[1];
+  return hash.format || "—";
+}
+
 function toDetails(meta: FileMeta): FileDetails {
   return {
     name: meta.name,
@@ -384,6 +395,10 @@ function App() {
   const showModeTabs = phase === "idle" || phase === "picking";
   const hashTooLargeToCopy =
     hash != null && hash.hash_line.length > 0 && isHashTooLargeToCopy(hash.hash_line);
+  const hashSizeLabel =
+    hash && hash.hash_line.length > 0
+      ? formatBytes(new TextEncoder().encode(hash.hash_line).length)
+      : "—";
 
   const noticeLines =
     hash == null
@@ -391,9 +406,6 @@ function App() {
       : [
           ...(hash.error ? [hash.error] : []),
           ...hash.warnings,
-          ...(hash.hashcat_mode != null
-            ? [`hashcat -m ${hash.hashcat_mode}`]
-            : []),
           ...(hashTooLargeToCopy
             ? ["Hash too large to copy — use Export .hash"]
             : []),
@@ -674,7 +686,17 @@ function App() {
             </div>
 
             <div className="hash-block">
-              <h2 className="block-label">Hash</h2>
+              <h2 className="block-label">Hash details</h2>
+              <dl className="detail-grid hash-meta">
+                <div>
+                  <dt>Hash mode</dt>
+                  <dd>{hashFormatLabel(hash)}</dd>
+                </div>
+                <div>
+                  <dt>Size</dt>
+                  <dd>{hashSizeLabel}</dd>
+                </div>
+              </dl>
               {hash.hash_line ? (
                 <pre className="hash-line" tabIndex={0}>
                   {previewHashLine(hash.hash_line)}
