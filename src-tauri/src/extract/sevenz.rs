@@ -4,6 +4,15 @@
 //! the AES-256 coder (method id 06F10701), read its NumCyclesPower / salt / IV
 //! properties, the packed stream size, unpack size and CRC. Field layout matches
 //! 7z2hashcat / John `7z2john`.
+//!
+//! When the next header is a `kEncodedHeader` (id 0x17), its property tree
+//! describes a *compressed* header (typically LZMA/LZMA2). The pack stream is
+//! read and decompressed before the real `kHeader` is parsed — exactly what
+//! `7z2john` does. Without that step the AES coder is invisible and extraction
+//! falsely reports "no AES coder found".
+
+use lzma_rs::decompress::raw::{Lzma2Decoder, LzmaDecoder, LzmaParams, LzmaProperties};
+use std::io::Cursor;
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -54,18 +63,151 @@ pub fn extract(path: &Path, source_name: &str) -> HashResult {
         Err(e) => return HashResult::err(FORMAT, source_name, format!("cannot read header: {e}")),
     };
 
-    let streams = match parse_next_header(&nheader) {
-        Some(s) => s,
-        None => {
-            return HashResult::warn(
-                FORMAT,
-                source_name,
-                "7z header could not be parsed or contains no encryption (unsupported layout)",
-            )
+    let streams = match resolve_streams(&mut file, &nheader) {
+        Ok(s) => s,
+        Err(ResolveError::Unsupported(msg)) => {
+            return HashResult::warn(FORMAT, source_name, msg);
+        }
+        Err(ResolveError::Failed(msg)) => {
+            return HashResult::err(FORMAT, source_name, msg);
         }
     };
 
     build_line(&mut file, source_name, streams)
+}
+
+/// Outcome of locating the archive's real StreamsInfo.
+enum ResolveError {
+    /// Layout is understood but cannot yield a hash (no encryption, unsupported
+    /// coder, etc.) — surfaced as a warning.
+    Unsupported(String),
+    /// A decode/I/O step that should have succeeded failed — surfaced as an error.
+    Failed(String),
+}
+
+/// Parse the next header, transparently decompressing a `kEncodedHeader` whose
+/// coder is a plain compressor (LZMA/LZMA2/COPY). If the encoded header is
+/// itself AES-encrypted (header-encrypted archive), its descriptor is returned
+/// directly — that descriptor's pack stream is the encrypted header that goes
+/// into the hash line.
+fn resolve_streams(file: &mut File, nheader: &[u8]) -> Result<StreamsInfo, ResolveError> {
+    let unsupported = || {
+        ResolveError::Unsupported(
+            "7z header could not be parsed or contains no encryption (unsupported layout)".into(),
+        )
+    };
+
+    let id = *nheader.first().ok_or_else(unsupported)?;
+    if id != 0x17 {
+        // kHeader (0x01) or anything else: parse directly.
+        return parse_next_header(nheader).ok_or_else(unsupported);
+    }
+
+    // kEncodedHeader: first parse its descriptor (PackInfo/UnpackInfo describing
+    // the compressed real header).
+    let enc = parse_next_header(nheader).ok_or_else(unsupported)?;
+
+    // Header-encrypted archive: the AES coder is in the descriptor itself. The
+    // descriptor's pack stream is exactly the encrypted header hashcat wants.
+    let has_aes = enc
+        .folders
+        .iter()
+        .any(|f| f.coders.iter().any(|c| c.id == AES_CODER_ID));
+    if has_aes {
+        return Ok(enc);
+    }
+
+    // Header is only compressed, not encrypted. Decompress the real kHeader and
+    // parse it instead.
+    let real = decode_encoded_header(file, &enc)?;
+    parse_next_header(&real).ok_or_else(unsupported)
+}
+
+/// Read and decompress the pack stream described by a `kEncodedHeader`
+/// descriptor, returning the bytes of the real `kHeader`.
+fn decode_encoded_header(file: &mut File, enc: &StreamsInfo) -> Result<Vec<u8>, ResolveError> {
+    let folder = enc
+        .folders
+        .first()
+        .ok_or_else(|| ResolveError::Failed("encoded header has no folder".into()))?;
+
+    let pack_size = enc
+        .pack_sizes
+        .first()
+        .copied()
+        .ok_or_else(|| ResolveError::Failed("encoded header has no pack size".into()))?
+        as usize;
+    let unpack_size = enc.unpack_sizes.last().copied().unwrap_or(0) as usize;
+
+    let data_off = SIG_HEADER_LEN + enc.pack_pos;
+    let packed = read_at(file, data_off, pack_size)
+        .map_err(|e| ResolveError::Failed(format!("read encoded header stream failed: {e}")))?;
+
+    // Header encoding in practice uses a single LZMA/LZMA2/COPY coder. Feed
+    // each stage's output into the next.
+    let mut current: Vec<u8> = packed;
+    for coder in &folder.coders {
+        current = match coder.id.as_slice() {
+            COPY_ID => current,
+            LZMA1_ID => lzma1_decompress(&current, &coder.props, unpack_size)?,
+            LZMA2_ID => lzma2_decompress(&current, unpack_size)?,
+            other => {
+                return Err(ResolveError::Failed(format!(
+                    "unsupported encoded-header coder: {}",
+                    hex_encode(other)
+                )));
+            }
+        };
+    }
+
+    Ok(current)
+}
+
+fn lzma1_decompress(
+    data: &[u8],
+    props: &[u8],
+    unpack_size: usize,
+) -> Result<Vec<u8>, ResolveError> {
+    if props.len() < 5 {
+        return Err(ResolveError::Failed(
+            "LZMA coder properties too short".into(),
+        ));
+    }
+    let b0 = props[0] as u32;
+    if b0 >= 225 {
+        return Err(ResolveError::Failed("invalid LZMA properties".into()));
+    }
+    let lc = b0 % 9;
+    let remainder = b0 / 9;
+    let lp = remainder % 5;
+    let pb = remainder / 5;
+    let dict_size = read_u32_le(props, 1)
+        .ok_or_else(|| ResolveError::Failed("bad LZMA dict size".into()))?;
+
+    let params = LzmaParams::new(
+        LzmaProperties { lc, lp, pb },
+        dict_size,
+        Some(unpack_size as u64),
+    );
+    let mut decoder = LzmaDecoder::new(params, None)
+        .map_err(|e| ResolveError::Failed(format!("LZMA decoder init: {e}")))?;
+
+    let mut input = Cursor::new(data);
+    let mut out = Vec::with_capacity(unpack_size);
+    decoder
+        .decompress(&mut input, &mut out)
+        .map_err(|e| ResolveError::Failed(format!("LZMA decompress failed: {e}")))?;
+    Ok(out)
+}
+
+fn lzma2_decompress(data: &[u8], unpack_size: usize) -> Result<Vec<u8>, ResolveError> {
+    let mut input = Cursor::new(data);
+    let mut out = Vec::with_capacity(unpack_size);
+    let mut decoder = Lzma2Decoder::new();
+    decoder
+        .decompress(&mut input, &mut out)
+        .map_err(|e| ResolveError::Failed(format!("LZMA2 decompress failed: {e}")))?;
+    Ok(out)
 }
 
 fn build_line(file: &mut File, source_name: &str, s: StreamsInfo) -> HashResult {
@@ -194,7 +336,8 @@ fn compression_fields(
     }
 
     if compression_type == 0 && preprocessor_type == 0 {
-        return Err("7z uses an unsupported post-AES coder chain");
+        // Only COPY coders after AES (stored, no compression): same as AES alone.
+        return Ok((0, String::new()));
     }
 
     let type_of_data = (preprocessor_type << 4) | compression_type;
@@ -786,5 +929,27 @@ mod tests {
                 res.hash_line
             );
         }
+    }
+
+    // Regression: a data-encrypted 7z whose next header is an LZMA-compressed
+    // kEncodedHeader (not header-encrypted). The AES coders live inside the
+    // decompressed real header and must be found there. Compared byte-for-byte
+    // against John the Ripper's 7z2john output.
+    #[test]
+    fn lzma_encoded_header_matches_7z2john() {
+        use std::path::Path;
+        let path = std::env::var("SEVENZ_LZMA_ENC_HEADER").ok();
+        let Some(path) = path else { return };
+        let path = Path::new(&path);
+        if !path.is_file() {
+            return;
+        }
+
+        let expected = "$7z$0$19$0$$16$8c2536eea1f16cc736e49ea9ca1fbe02$2259142691$128$113$bb55a9f8db6ef58238b8596ca3903188863a81b4f8dbe455b82ad60ee227df81118a9bed0e77913e4be70b62634881d1838a5a11966786917eb4b0f7c390efe3bc0076f2c83b0a2a9ce36e4661a3ea6ffa3e61f2835dd24bb9688ae67720002b8cf5cb1bb58e676a62cb957eb002de585cb8492a647b42ecfbdb73db8076a291";
+
+        let res = extract(path, "sample.tgz");
+        assert!(res.error.is_none(), "error: {:?}", res.error);
+        assert!(res.warnings.is_empty(), "warnings: {:?}", res.warnings);
+        assert_eq!(res.hash_line, expected);
     }
 }
