@@ -72,6 +72,14 @@ Installer assets are named with a platform suffix:
 
 On Apple Silicon, use the apple-silicon DMG. The Intel DMG runs under Rosetta and may show a soon-unsupported warning.
 
+**macOS Gatekeeper:** CI builds are ad-hoc signed unless you configure a Developer ID. An unsigned Apple Silicon download is reported as damaged and cannot be opened. If that happens after dragging the app to Applications:
+
+```bash
+xattr -cr "/Applications/Catpasswd Hash Extract.app"
+```
+
+Then open it again. The first launch may still need **System Settings → Privacy & Security → Open Anyway**. Seamless double-click distribution requires an Apple Developer ID certificate and notarization.
+
 
 ## Security & ethics
 

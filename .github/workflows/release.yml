@@ -105,6 +105,9 @@ jobs:
         id: tauri_build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ad-hoc sign the whole .app on macOS. Unsigned GitHub DMGs are
+          # reported as damaged on Apple Silicon.
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         with:
           tagName: v__VERSION__
           releaseName: 'Catpasswd Hash Extract v__VERSION__'
@@ -162,6 +165,24 @@ jobs:
           args: ${{ matrix.args }}
           releaseAssetNamePattern: ${{ matrix.asset_name }}
           uploadUpdaterJson: false
+
+      - name: Verify macOS bundle signature
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          APP="src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/Catpasswd Hash Extract.app"
+          echo "Checking $APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          INFO="$(codesign -dv --verbose=4 "$APP" 2>&1)"
+          echo "$INFO"
+          if echo "$INFO" | grep -q 'linker-signed'; then
+            echo "::error::App is still linker-signed; the bundle was not re-signed."
+            exit 1
+          fi
+          if echo "$INFO" | grep -q 'Sealed Resources=none'; then
+            echo "::error::App bundle has no sealed resources."
+            exit 1
+          fi
 
       - name: Upload Windows portable exe
         if: matrix.portable_slug != ''
