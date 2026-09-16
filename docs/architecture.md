@@ -54,7 +54,7 @@ Native Rust extractors, one per format, all sharing the detect → extract → `
 | ZIP (ZipCrypto) | `$pkzip$…` (John `zip2john`) | — (John-first; hashcat later) |
 | RAR5 | `$rar5$…` | 13000 |
 | RAR3 (`-hp`) | `$RAR3$*0*…` | 12500 |
-| 7-Zip (AES) | `$7z$…` | 11600 |
+| 7-Zip (AES) | `$7z$…` (full packed stream; refuse if larger than 64 MiB rather than emit a truncated line John cannot load) | 11600 |
 | Office 2010/2013+ (Agile) | `$office$*2010/2013*…` | 9500 / 9600 |
 | Office 2007 (Standard) | `$office$*2007*…` | 9400 |
 | Excel 97–2003 (RC4) | `$oldoffice$…` (John `office2john`) | 9700 / 9800 |

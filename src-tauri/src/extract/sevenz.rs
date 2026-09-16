@@ -31,9 +31,13 @@ const BZIP2_ID: &[u8] = &[0x04, 0x02, 0x02];
 const DEFLATE_ID: &[u8] = &[0x04, 0x01, 0x08];
 const COPY_ID: &[u8] = &[0x00];
 
-/// Maximum ciphertext embedded in the hash line. Header-encrypted archives are
-/// tiny; large data-encrypted payloads are truncated with a warning.
-const EMBED_CAP: usize = 8 * 1024 * 1024;
+/// Maximum packed AES stream we will hex-embed. John `valid()` requires
+/// `len(hex data)/2 == psize`; truncating the bytes while leaving the original
+/// pack size makes a hash that neither John nor hashcat will load.
+///
+/// Above this, refuse rather than emit an unloadable line. (hashcat 11600 is
+/// ~8 MiB; John can take more. The UI already caches large lines.)
+const EMBED_CAP: usize = 64 * 1024 * 1024;
 
 pub fn extract(path: &Path, source_name: &str) -> HashResult {
     let mut file = match File::open(path) {
@@ -248,8 +252,17 @@ fn build_line(file: &mut File, source_name: &str, s: StreamsInfo) -> HashResult 
     let crc = digest_for_stream(&s, 0);
 
     let data_off = SIG_HEADER_LEN + s.pack_pos;
-    let want = (pack_size as usize).min(EMBED_CAP);
-    let data = match read_at(file, data_off, want) {
+    if (pack_size as usize) > EMBED_CAP {
+        return HashResult::err(
+            FORMAT,
+            source_name,
+            format!(
+                "7z packed stream is too large to embed in a hash ({} bytes, max {})",
+                pack_size, EMBED_CAP
+            ),
+        );
+    }
+    let data = match read_at(file, data_off, pack_size as usize) {
         Ok(b) => b,
         Err(e) => return HashResult::err(FORMAT, source_name, format!("read data failed: {e}")),
     };
@@ -268,7 +281,7 @@ fn build_line(file: &mut File, source_name: &str, s: StreamsInfo) -> HashResult 
         ivlen = props.iv_len,
         iv = hex_encode(&props.iv),
         crc = crc,
-        psize = pack_size,
+        psize = data.len(),
         usize_ = unpack_size,
         data = hex_encode(&data),
     );
@@ -277,9 +290,6 @@ fn build_line(file: &mut File, source_name: &str, s: StreamsInfo) -> HashResult 
     let mut res = HashResult::ok(FORMAT, source_name, line, Some(11600));
     if crc == 0 {
         res = res.with_warning("no CRC found in 7z header; verification field is 0");
-    }
-    if (pack_size as usize) > EMBED_CAP {
-        res = res.with_warning("7z ciphertext truncated in hash line (very large payload)");
     }
     res
 }
@@ -897,6 +907,22 @@ mod tests {
     }
 
     #[test]
+    fn embed_cap_covers_typical_large_payloads_without_lying_about_psize() {
+        // The user archive that John rejected was ~38 MiB packed vs 8 MiB embedded.
+        assert!(EMBED_CAP > 40 * 1024 * 1024);
+        let data = vec![0u8; 32];
+        let psize = data.len();
+        let line = format!(
+            "$7z$2$19$0$$16${iv}$1${psize}$12${data}",
+            iv = "aa".repeat(16),
+            psize = psize,
+            data = hex_encode(&data),
+        );
+        let parts: Vec<&str> = line.split('$').collect();
+        assert_eq!(parts[9].parse::<usize>().unwrap(), parts[11].len() / 2);
+    }
+
+    #[test]
     fn live_archives_match_7z2hashcat_layout() {
         use std::path::Path;
 
@@ -951,5 +977,30 @@ mod tests {
         assert!(res.error.is_none(), "error: {:?}", res.error);
         assert!(res.warnings.is_empty(), "warnings: {:?}", res.warnings);
         assert_eq!(res.hash_line, expected);
+    }
+
+    fn psize_and_data_bytes(line: &str) -> (usize, usize) {
+        let parts: Vec<&str> = line.split('$').collect();
+        (
+            parts[9].parse().unwrap(),
+            parts[11].len() / 2,
+        )
+    }
+
+    #[test]
+    fn truncated_ciphertext_with_original_psize_is_invalid() {
+        // John sevenzip_valid(): strlen(data)/2 must equal field 9 (aes_length).
+        let data = "aa".repeat(32);
+        let ok = format!("$7z$2$19$0$$16${}$1$32$12${}$12$0c", "bb".repeat(16), data);
+        let (psize, data_bytes) = psize_and_data_bytes(&ok);
+        assert_eq!(psize, data_bytes);
+
+        let truncated = format!(
+            "$7z$2$19$0$$16${}$1$40104128$40104123${}$40121744$0c",
+            "bb".repeat(16),
+            "cc".repeat(8 * 1024),
+        );
+        let (psize, data_bytes) = psize_and_data_bytes(&truncated);
+        assert_ne!(psize, data_bytes);
     }
 }
