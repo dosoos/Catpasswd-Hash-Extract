@@ -100,6 +100,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # AppImage catalog (and firejail) mounts as root then runs as another user.
+      # Older Tauri bundlers wrote AppRun as 0770 → AppRun.wrapped Permission denied.
+      # CLI 2.12+ uses 0755; seeding the cache keeps that mode even if an older CLI is resolved.
+      - name: Seed AppImage AppRun as world-executable
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          dir="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/AppRun-$arch" \
+            "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-$arch"
+          chmod 755 "$dir/AppRun-$arch"
+
       - name: Build and upload release
         uses: tauri-apps/tauri-action@v1
         id: tauri_build
